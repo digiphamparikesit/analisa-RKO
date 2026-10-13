@@ -101,12 +101,12 @@ const Auth = {
       const errEl    = document.getElementById('login-error');
       errEl.textContent = 'Memproses...';
       try {
-      await Auth.login(email, password);
-      errEl.textContent = 'Berhasil! Memuat...';
-      setTimeout(() => location.reload(), 300);
-    } catch (err) {
-      errEl.textContent = 'Login gagal: ' + err.message;
-    }
+        await Auth.login(email, password);
+        errEl.textContent = 'Berhasil! Memuat...';
+        setTimeout(() => location.reload(), 300);
+      } catch (err) {
+        errEl.textContent = 'Login gagal: ' + err.message;
+      }
     });
     document.getElementById('btn-logout').onclick = () => {
       if (confirm('Logout dari aplikasi?')) Auth.logout();
@@ -394,6 +394,7 @@ const TrxPage = (() => {
           <button id="btn-export" class="btn btn-success">&#11015; Export Excel</button>
         </div>
       </div>
+      <div id="trx-table" class="bg-white rounded-xl shadow"></div>
     `;
 
     if (!cfg.periodId) {
@@ -485,7 +486,11 @@ const TrxPage = (() => {
     };
   }
 
-  async function refresh(cfg) {
+  async function refresh(cfg, pageNum) {
+    if (pageNum !== undefined) cfg._page = pageNum;
+    if (!cfg._page) cfg._page = 1;
+    const pageSize = 20;
+
     const div = document.getElementById('trx-table');
     div.innerHTML = '<div class="p-6 text-slate-500 text-sm">Memuat...</div>';
     const { data, error } = await cfg.query(cfg.periodId);
@@ -493,13 +498,19 @@ const TrxPage = (() => {
     cfg._data = data || [];
 
     const cols = cfg.columns;
-    let html = '<table class="w-full text-xs"><thead class="text-left">';
+    const total = cfg._data.length;
+    const totalPage = Math.max(1, Math.ceil(total / pageSize));
+    if (cfg._page > totalPage) cfg._page = totalPage;
+    const from = (cfg._page - 1) * pageSize;
+    const pageData = cfg._data.slice(from, from + pageSize);
+
+    let html = '<div class="table-scroll"><table class="w-full text-xs"><thead class="text-left">';
     html += '<tr><th class="px-2 py-2 w-10">#</th>';
     cols.forEach(c => html += `<th class="px-2 py-2">${c.label}</th>`);
     html += '<th class="px-2 py-2 w-16">Aksi</th></tr></thead><tbody>';
 
-    cfg._data.forEach((r, i) => {
-      html += `<tr class="border-t hover:bg-slate-50"><td class="px-2 py-1 text-slate-400">${i+1}</td>`;
+    pageData.forEach((r, i) => {
+      html += `<tr class="border-t hover:bg-slate-50"><td class="px-2 py-1 text-slate-400">${from + i + 1}</td>`;
       cols.forEach(c => {
         const v = r[c.key];
         html += `<td class="px-2 py-1">${v == null ? '' : esc(v)}</td>`;
@@ -508,13 +519,28 @@ const TrxPage = (() => {
         <button data-del="${r.id}" class="text-red-600 hover:underline">hapus</button>
       </td></tr>`;
     });
-    if (!cfg._data.length) {
+    if (!pageData.length) {
       html += `<tr><td colspan="${cols.length+2}" class="px-2 py-8 text-center text-slate-400">
         Belum ada data. Klik "Paste dari Excel" untuk mulai.
       </td></tr>`;
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
+
+    if (total > 0) {
+      html += `<div class="p-3 flex items-center justify-between border-t text-sm bg-white">
+        <span>Total: <b>${total}</b> baris · Halaman ${cfg._page}/${totalPage}</span>
+        <div class="flex gap-2">
+          <button id="trx-prev" class="btn btn-gray" ${cfg._page===1?'disabled':''}>&larr; Prev</button>
+          <button id="trx-next" class="btn btn-gray" ${cfg._page>=totalPage?'disabled':''}>Next &rarr;</button>
+        </div>
+      </div>`;
+    }
     div.innerHTML = html;
+
+    const prevBtn = document.getElementById('trx-prev');
+    const nextBtn = document.getElementById('trx-next');
+    if (prevBtn) prevBtn.onclick = () => refresh(cfg, cfg._page - 1);
+    if (nextBtn) nextBtn.onclick = () => refresh(cfg, cfg._page + 1);
 
     div.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
       if (!confirm('Hapus baris ini?')) return;
@@ -667,14 +693,14 @@ async function pageStok() {
         </div>
         <div>
           <label class="text-xs text-slate-500">Kategori Item</label>
-          <select id="i-kat" class="w-full border rounded px-2 py-1 text-sm">
-  <option value="">Semua Grup</option>
-  <option value="Obat">Obat</option>
-  <option value="BMHP">BMHP</option>
-  <option value="B3">B3</option>
-  <option value="Nutrisi">Nutrisi Enteral</option>
-  <option value="Program">Program</option>
-</select>
+          <select id="f-kat" class="w-full border rounded px-2 py-1 text-sm">
+            <option value="">Semua Grup</option>
+            <option value="Obat">Obat</option>
+            <option value="BMHP">BMHP</option>
+            <option value="B3">B3</option>
+            <option value="Nutrisi">Nutrisi Enteral</option>
+            <option value="Program">Program</option>
+          </select>
         </div>
         <div>
           <label class="text-xs text-slate-500">Cari (kode/nama)</label>
@@ -686,7 +712,7 @@ async function pageStok() {
         </div>
       </div>
     </div>
-    <div id="stok-table" class="bg-white rounded-xl shadow overflow-auto"></div>
+    <div id="stok-table" class="bg-white rounded-xl shadow"></div>
   `;
 
   const units = await TrxPage.loadUnits();
@@ -695,26 +721,21 @@ async function pageStok() {
     units.map(u => `<option value="${u.id}">${esc(u.kode)} — ${esc(u.nama)}</option>`).join('');
 
   let currentData = [];
+  let page = 1, pageSize = 20;
 
-  async function load() {
+  function renderTable() {
     const div = document.getElementById('stok-table');
-    div.innerHTML = '<div class="p-6 text-slate-500 text-sm">Memuat...</div>';
-    let q = sb.from('v_stok').select('*').eq('period_id', window.activePeriodId);
-    const uid = selUnit.value;
-    const kat = document.getElementById('f-kat').value;
-    const key = document.getElementById('f-q').value.trim();
-    if (uid) q = q.eq('unit_id', uid);
-    if (kat) q = q.eq('item_kategori', kat);
-    if (key) q = q.or(`item_kode.ilike.%${key}%,item_nama.ilike.%${key}%`);
-    const { data, error } = await q.order('item_nama').limit(2000);
-    if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
-    currentData = data || [];
+    const total = currentData.length;
+    const totalPage = Math.max(1, Math.ceil(total / pageSize));
+    if (page > totalPage) page = totalPage;
+    const from = (page - 1) * pageSize;
+    const pageData = currentData.slice(from, from + pageSize);
 
-    let html = '<table class="w-full text-xs"><thead class="text-left"><tr>';
+    let html = '<div class="table-scroll"><table class="w-full text-xs"><thead class="text-left"><tr>';
     ['Unit','Kode','Nama Item','Satuan','Awal','Masuk','Keluar','Pakai','Penyesuaian','Akhir','Min','Status']
       .forEach(h => html += `<th class="px-2 py-2">${h}</th>`);
     html += '</tr></thead><tbody>';
-    currentData.forEach(r => {
+    pageData.forEach(r => {
       const kritis = Number(r.stok_akhir) < Number(r.min_stok || 0);
       html += `<tr class="border-t hover:bg-slate-50">
         <td class="px-2 py-1">${esc(r.unit_kode)}</td>
@@ -733,9 +754,40 @@ async function pageStok() {
           : '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">OK</span>'}</td>
       </tr>`;
     });
-    if (!currentData.length) html += `<tr><td colspan="12" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
-    html += '</tbody></table>';
+    if (!pageData.length) html += `<tr><td colspan="12" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
+    html += '</tbody></table></div>';
+
+    if (total > 0) {
+      html += `<div class="p-3 flex items-center justify-between border-t text-sm bg-white">
+        <span>Total: <b>${total}</b> baris · Halaman ${page}/${totalPage}</span>
+        <div class="flex gap-2">
+          <button id="stok-prev" class="btn btn-gray" ${page===1?'disabled':''}>&larr; Prev</button>
+          <button id="stok-next" class="btn btn-gray" ${page>=totalPage?'disabled':''}>Next &rarr;</button>
+        </div>
+      </div>`;
+    }
     div.innerHTML = html;
+    const p = document.getElementById('stok-prev');
+    const n = document.getElementById('stok-next');
+    if (p) p.onclick = () => { page--; renderTable(); };
+    if (n) n.onclick = () => { page++; renderTable(); };
+  }
+
+  async function load() {
+    const div = document.getElementById('stok-table');
+    div.innerHTML = '<div class="p-6 text-slate-500 text-sm">Memuat...</div>';
+    let q = sb.from('v_stok').select('*').eq('period_id', window.activePeriodId);
+    const uid = selUnit.value;
+    const kat = document.getElementById('f-kat').value;
+    const key = document.getElementById('f-q').value.trim();
+    if (uid) q = q.eq('unit_id', uid);
+    if (kat) q = q.eq('item_grup', kat);
+    if (key) q = q.or(`item_kode.ilike.%${key}%,item_nama.ilike.%${key}%`);
+    const { data, error } = await q.order('item_nama').limit(5000);
+    if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
+    currentData = data || [];
+    page = 1;
+    renderTable();
   }
 
   document.getElementById('f-apply').onclick = load;
@@ -839,7 +891,7 @@ async function pageAnalisa() {
     let html = `<div class="mb-2 flex justify-end">
       <button class="btn btn-success" data-export="${tag}">&#11015; Export Excel</button>
     </div>`;
-    html += '<div class="overflow-auto"><table class="w-full text-xs"><thead><tr>';
+    html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
     cols.forEach(c => html += `<th class="px-2 py-2 text-left">${c[1]}</th>`);
     html += '</tr></thead><tbody>';
     rows.forEach(r => {
@@ -886,13 +938,13 @@ async function pageMasterItem() {
         <div>
           <label class="text-xs text-slate-500">Kategori</label>
           <select id="i-kat" class="w-full border rounded px-2 py-1 text-sm">
-  <option value="">Semua Grup</option>
-  <option value="Obat">Obat</option>
-  <option value="BMHP">BMHP</option>
-  <option value="B3">B3</option>
-  <option value="Nutrisi">Nutrisi Enteral</option>
-  <option value="Program">Program</option>
-</select>
+            <option value="">Semua Grup</option>
+            <option value="Obat">Obat</option>
+            <option value="BMHP">BMHP</option>
+            <option value="B3">B3</option>
+            <option value="Nutrisi">Nutrisi Enteral</option>
+            <option value="Program">Program</option>
+          </select>
         </div>
         <div class="flex items-end">
           <button id="i-search" class="btn btn-primary w-full">Cari</button>
@@ -903,12 +955,13 @@ async function pageMasterItem() {
         </div>
       </div>
     </div>
+    <div class="bg-white rounded-xl shadow">
       <div id="i-table"></div>
       <div id="i-pager" class="p-3 flex items-center justify-between border-t text-sm"></div>
     </div>
   `;
 
-  let page = 1, pageSize = 50, total = 0;
+  let page = 1, pageSize = 20, total = 0;
 
   async function load() {
     const div = document.getElementById('i-table');
@@ -920,12 +973,12 @@ async function pageMasterItem() {
 
     let query = sb.from('items').select('*', { count:'exact' }).range(from, to).order('nama');
     if (q) query = query.or(`kode.ilike.%${q}%,nama.ilike.%${q}%`);
-    if (kat) query = query.eq('kategori', kat);
+    if (kat) query = query.eq('grup', kat);
     const { data, error, count } = await query;
     if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
     total = count || 0;
 
-    let html = '<table class="w-full text-xs"><thead><tr>';
+    let html = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
     ['Kode','Nama','Kategori','Satuan','Harga','Min Stok','Aktif','Aksi'].forEach(h =>
       html += `<th class="px-2 py-2 text-left">${h}</th>`);
     html += '</tr></thead><tbody>';
@@ -942,7 +995,7 @@ async function pageMasterItem() {
       </tr>`;
     });
     if (!data?.length) html += '<tr><td colspan="8" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     div.innerHTML = html;
 
     div.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
@@ -992,7 +1045,6 @@ async function pageMasterItem() {
           const kode = String(raw.kode).trim().toUpperCase();
           const katRaw = String(raw.kategori || '').trim().toUpperCase().replace(/\s+/g, ' ');
 
-          // --- Daftar kategori baku ---
           const KATEGORI_VALID = [
             'B3', 'BMHP', 'NUTRISI ENTERAL', 'OBAT',
             'PROGRAM', 'PROGRAM BKKBN', 'PROGRAM COVID', 'PROGRAM HIV',
@@ -1000,7 +1052,6 @@ async function pageMasterItem() {
             'PROGRAM STUNTING', 'PROGRAM TB',
           ];
 
-          // --- Normalisasi alias ---
           const ALIAS = {
             'BHP': 'BMHP',
             'ALKES': 'BMHP',
@@ -1013,7 +1064,6 @@ async function pageMasterItem() {
           };
           let kategori = ALIAS[katRaw] || katRaw;
 
-          // --- Tentukan grup otomatis ---
           let grup = null;
           if (kategori === 'OBAT') grup = 'Obat';
           else if (kategori === 'BMHP') grup = 'BMHP';
@@ -1066,7 +1116,7 @@ async function pageMasterItem() {
 // ---------- PAGE: MASTER UNIT ----------
 async function pageMasterUnit() {
   const el = document.getElementById('page-content');
-  el.innerHTML = `<div id="u-table" class="table-scroll">`;
+  el.innerHTML = `<div class="bg-white rounded-xl shadow"><div id="u-table" class="table-scroll"></div></div>`;
 
   const { data, error } = await sb.from('units').select('*').order('kategori').order('kode');
   if (error) { document.getElementById('u-table').innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
@@ -1123,7 +1173,7 @@ async function pageMasterPeriode() {
       </div>
       <button id="p-add" class="btn btn-primary">+ Buat Periode</button>
     </div>
-    <div class="bg-white rounded-xl shadow overflow-auto"><div id="p-table"></div></div>
+    <div class="bg-white rounded-xl shadow"><div id="p-table" class="table-scroll"></div></div>
   `;
 
   async function load() {
