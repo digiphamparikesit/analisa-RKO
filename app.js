@@ -964,22 +964,42 @@ async function pageMasterItem() {
           };
           let err = null;
           const kode = String(raw.kode).trim().toUpperCase();
-          const katRaw = String(raw.kategori || '').trim().toUpperCase();
+          const katRaw = String(raw.kategori || '').trim().toUpperCase().replace(/\s+/g, ' ');
 
-          // Normalisasi kategori (case-insensitive)
-          const katMap = {
-            'OBAT': 'Obat',
-            'BMHP': 'BMHP',
-            'PROGRAM TB': 'Obat',
-            'PROGRAM': 'Obat',
+          // --- Daftar kategori baku ---
+          const KATEGORI_VALID = [
+            'B3', 'BMHP', 'NUTRISI ENTERAL', 'OBAT',
+            'PROGRAM', 'PROGRAM BKKBN', 'PROGRAM COVID', 'PROGRAM HIV',
+            'PROGRAM IMUNISASI', 'PROGRAM MALARIA', 'PROGRAM RABIES',
+            'PROGRAM STUNTING', 'PROGRAM TB',
+          ];
+
+          // --- Normalisasi alias ---
+          const ALIAS = {
+            'BHP': 'BMHP',
             'ALKES': 'BMHP',
-            'VITAMIN': 'Obat',
+            'NUTRISI': 'NUTRISI ENTERAL',
+            'NUTRISI ENTERAL': 'NUTRISI ENTERAL',
+            'PROGRAM IMUNISASI ANAK': 'PROGRAM IMUNISASI',
+            'IMUNISASI': 'PROGRAM IMUNISASI',
+            'TB': 'PROGRAM TB',
+            'TB PARU': 'PROGRAM TB',
           };
-          const kategori = katMap[katRaw];
+          let kategori = ALIAS[katRaw] || katRaw;
+
+          // --- Tentukan grup otomatis ---
+          let grup = null;
+          if (kategori === 'OBAT') grup = 'Obat';
+          else if (kategori === 'BMHP') grup = 'BMHP';
+          else if (kategori === 'B3') grup = 'B3';
+          else if (kategori === 'NUTRISI ENTERAL') grup = 'Nutrisi';
+          else if (kategori.startsWith('PROGRAM')) grup = 'Program';
 
           if (!kode) err = 'Kode wajib';
           else if (seen.has(kode)) err = 'Kode duplikat di paste';
-          else if (!kategori) err = `Kategori "${raw.kategori}" tidak dikenali (harus Obat / BMHP)`;
+          else if (!KATEGORI_VALID.includes(kategori))
+            err = `Kategori "${raw.kategori}" tidak dikenali`;
+          else if (!grup) err = `Grup kategori "${kategori}" tidak terdeteksi`;
           else if (!raw.nama) err = 'Nama wajib';
           else if (!raw.satuan) err = 'Satuan wajib';
           if (err) { out.errors.push({ rowNum, raw, msg: err }); return; }
@@ -988,6 +1008,7 @@ async function pageMasterItem() {
             kode,
             nama: String(raw.nama).trim(),
             kategori,
+            grup,
             satuan: String(raw.satuan).trim(),
             harga_default: parseNumber(raw.harga_default) ?? 0,
             min_stok: parseNumber(raw.min_stok) ?? 0,
