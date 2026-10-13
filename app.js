@@ -810,6 +810,17 @@ async function pageStok() {
 async function pageAnalisa() {
   const el = document.getElementById('page-content');
   el.innerHTML = `
+    <div class="bg-white rounded-xl shadow p-4 mb-3">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+        <div>
+          <label class="text-xs text-slate-500">Filter Unit (berlaku untuk Stock Cover, Dead Stock, Nilai)</label>
+          <select id="a-unit" class="w-full border rounded px-2 py-1 text-sm"></select>
+        </div>
+        <div class="text-xs text-slate-400 pb-2">
+          Tab <b>Capaian RKO</b> selalu dari sudut pandang Gudang Farmasi (tidak terpengaruh filter unit).
+        </div>
+      </div>
+    </div>
     <div class="bg-white rounded-xl shadow mb-4">
       <div class="flex border-b overflow-auto">
         <button data-tab="rko"   class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Capaian RKO</button>
@@ -823,6 +834,17 @@ async function pageAnalisa() {
 
   const pid = window.activePeriodId;
   const body = document.getElementById('tab-body');
+  const selUnit = document.getElementById('a-unit');
+  let currentTab = 'rko';
+
+  // Load unit + default Gudang Farmasi
+  const units = await TrxPage.loadUnits();
+  const gf = units.find(u => u.tipe === 'gudang_farmasi');
+  selUnit.innerHTML = '<option value="">Semua Unit</option>' +
+    units.map(u => `<option value="${u.id}">${esc(u.kode)} — ${esc(u.nama)}</option>`).join('');
+  selUnit.value = gf?.id || '';
+
+  selUnit.onchange = () => renderTab(currentTab);
 
   function setActive(name) {
     document.querySelectorAll('.tab-btn').forEach(b => {
@@ -835,9 +857,13 @@ async function pageAnalisa() {
   }
 
   async function renderTab(name) {
+    currentTab = name;
     setActive(name);
     body.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
 
+    const unitId = selUnit.value;
+
+    // --- Tab 1: Capaian RKO (tidak terpengaruh filter unit) ---
     if (name === 'rko') {
       const { data } = await sb.from('v_analisa_rko').select('*').eq('period_id', pid)
         .order('capaian_persen', { ascending:true }).limit(3000);
@@ -849,30 +875,41 @@ async function pageAnalisa() {
         ['nilai_rko','Nilai RKO'], ['nilai_realisasi','Nilai Realisasi'],
       ], 'rko');
     }
+
+    // --- Tab 2: Stock Cover ---
     else if (name === 'cover') {
-      const { data } = await sb.from('v_stok').select('*')
-        .eq('period_id', pid).eq('unit_tipe','gudang_farmasi');
+      let q = sb.from('v_stok').select('*').eq('period_id', pid);
+      if (unitId) q = q.eq('unit_id', unitId);
+      const { data } = await q;
       const rows = (data || []).map(r => {
         const pakai = Number(r.total_pemakaian || 0) || 1;
         return { ...r, cover_bulan: (Number(r.stok_akhir || 0) / pakai).toFixed(2) };
       }).sort((a,b) => Number(a.cover_bulan) - Number(b.cover_bulan));
       body.innerHTML = tableHTML(rows, [
-        ['item_kode','Kode'], ['item_nama','Nama Item'], ['satuan','Satuan'],
+        ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'], ['satuan','Satuan'],
         ['stok_akhir','Stok Akhir'], ['total_pemakaian','Pemakaian'],
         ['cover_bulan','Cover (bulan)'],
       ], 'stock-cover');
     }
+
+    // --- Tab 3: Dead Stock ---
     else if (name === 'dead') {
-      const { data } = await sb.from('v_stok').select('*')
-        .eq('period_id', pid).gt('stok_akhir', 0).eq('total_pemakaian', 0);
+      let q = sb.from('v_stok').select('*').eq('period_id', pid)
+        .gt('stok_akhir', 0).eq('total_pemakaian', 0);
+      if (unitId) q = q.eq('unit_id', unitId);
+      const { data } = await q;
       body.innerHTML = tableHTML(data || [], [
         ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
         ['satuan','Satuan'], ['stok_akhir','Stok Akhir'],
         ['harga_default','Harga'], ['total_pemakaian','Pemakaian'],
       ], 'dead-stock');
     }
+
+    // --- Tab 4: Nilai Persediaan ---
     else if (name === 'nilai') {
-      const { data } = await sb.from('v_stok').select('*').eq('period_id', pid);
+      let q = sb.from('v_stok').select('*').eq('period_id', pid);
+      if (unitId) q = q.eq('unit_id', unitId);
+      const { data } = await q;
       const agg = {};
       (data || []).forEach(r => {
         const v = Number(r.stok_akhir || 0) * Number(r.harga_default || 0);
@@ -903,12 +940,11 @@ async function pageAnalisa() {
         const v = r[c[0]];
         const h = String(c[1]).toLowerCase();
         const isKodeCol = h.includes('kode');
-        // Qty, Nilai, Stok, Pemakaian, Realisasi → integer (tanpa desimal)
         const isIntCol  = /qty|nilai|stok|pemakaian|realisasi|total/.test(h);
         const isNum     = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
         let out = '';
         if (v == null)       out = '';
-        else if (isKodeCol)  out = esc(v);                  // Kode: tampil apa adanya
+        else if (isKodeCol)  out = esc(v);
         else if (isNum)      out = isIntCol ? fmtInt(v) : fmtNum(v);
         else                 out = esc(v);
         const rightAlign = isNum && !isKodeCol;
@@ -921,13 +957,14 @@ async function pageAnalisa() {
     setTimeout(() => {
       const btn = document.querySelector(`[data-export="${tag}"]`);
       if (btn) btn.onclick = () => {
+        const unitSuffix = selUnit.value ? '-' + (units.find(u=>u.id==selUnit.value)?.kode || '') : '';
         const obj = rows.map(r => {
           const o = {}; cols.forEach(c => o[c[1]] = r[c[0]]); return o;
         });
         const ws = XLSX.utils.json_to_sheet(obj);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, tag.slice(0,30));
-        XLSX.writeFile(wb, `${tag}-${Period.label(pid) || ''}.xlsx`);
+        XLSX.writeFile(wb, `${tag}${unitSuffix}-${Period.label(pid) || ''}.xlsx`);
       };
     }, 0);
 
