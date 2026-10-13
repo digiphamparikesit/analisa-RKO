@@ -439,7 +439,9 @@ const TrxPage = (() => {
             } else if (c.type === 'unit_code') {
               const un = uMap.get(String(v).toUpperCase());
               if (!un) { err = err || `Kode unit "${v}" tidak ditemukan`; break; }
-              parsed[c.key + '_id'] = un.id; parsed['_'+c.key] = un;
+              const idKey = c.idKey || 'unit_id';
+              parsed[idKey] = un.id;
+              parsed['_'+c.key] = un;
             } else if (c.type === 'number') {
               const n = parseNumber(v);
               parsed[c.key] = (n == null ? (c.default ?? 0) : n);
@@ -1278,8 +1280,8 @@ async function pageMutasi(periodId) {
       { key:'no_dokumen',  label:'No Dokumen' },
       { key:'item_kode',   label:'Kode Item',   type:'item_code', required:true },
       { key:'item_nama',   label:'Nama Item' },
-      { key:'unit_asal',   label:'Unit Asal',   type:'unit_code' },
-      { key:'unit_tujuan', label:'Unit Tujuan', type:'unit_code', required:true },
+      { key:'unit_asal',   label:'Unit Asal',   type:'unit_code', idKey:'unit_asal_id' },
+      { key:'unit_tujuan', label:'Unit Tujuan', type:'unit_code', required:true, idKey:'unit_tujuan_id' },
       { key:'qty',         label:'Qty',         type:'number', required:true },
       { key:'jenis',       label:'Jenis' },
       { key:'ket',         label:'Ket' },
