@@ -394,7 +394,6 @@ const TrxPage = (() => {
           <button id="btn-export" class="btn btn-success">&#11015; Export Excel</button>
         </div>
       </div>
-      <div id="trx-table" class="bg-white rounded-xl shadow overflow-auto"></div>
     `;
 
     if (!cfg.periodId) {
@@ -904,7 +903,6 @@ async function pageMasterItem() {
         </div>
       </div>
     </div>
-    <div class="bg-white rounded-xl shadow overflow-auto">
       <div id="i-table"></div>
       <div id="i-pager" class="p-3 flex items-center justify-between border-t text-sm"></div>
     </div>
@@ -1068,7 +1066,7 @@ async function pageMasterItem() {
 // ---------- PAGE: MASTER UNIT ----------
 async function pageMasterUnit() {
   const el = document.getElementById('page-content');
-  el.innerHTML = `<div class="bg-white rounded-xl shadow overflow-auto"><div id="u-table"></div></div>`;
+  el.innerHTML = `<div id="u-table" class="table-scroll">`;
 
   const { data, error } = await sb.from('units').select('*').order('kategori').order('kode');
   if (error) { document.getElementById('u-table').innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
