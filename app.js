@@ -992,7 +992,7 @@ async function pageAnalisa() {
         const v = r[c[0]];
         const h = String(c[1]).toLowerCase();
         const isKodeCol = h.includes('kode');
-        const isIntCol  = /qty|nilai|stok|pemakaian|realisasi|total|jml/.test(h);
+        const isIntCol  = /qty|nilai|stok|pemakaian|realisasi|total|jml|kritis/.test(h);
         const isNum     = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
         let out = '';
         if (v == null)       out = '';
