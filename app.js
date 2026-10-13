@@ -735,7 +735,7 @@ async function pageStok() {
     const pageData = currentData.slice(from, from + pageSize);
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead class="text-left"><tr>';
-    ['Unit','Kode','Nama Item','Satuan','Awal','Masuk','Keluar','Pakai','Penyesuaian','Akhir','Min','Status']
+    ['Unit','Kode','Nama Item','Kategori','Satuan','Awal','Masuk','Keluar','Pakai','Penyesuaian','Akhir','Min','Status']
       .forEach(h => html += `<th class="px-2 py-2">${h}</th>`);
     html += '</tr></thead><tbody>';
     pageData.forEach(r => {
@@ -744,6 +744,7 @@ async function pageStok() {
         <td class="px-2 py-1">${esc(r.unit_kode)}</td>
         <td class="px-2 py-1">${esc(r.item_kode)}</td>
         <td class="px-2 py-1">${esc(r.item_nama)}</td>
+        <td class="px-2 py-1">${esc(r.item_kategori)}</td>
         <td class="px-2 py-1">${esc(r.satuan)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.stok_awal,0)}</td>
         <td class="px-2 py-1 text-right text-green-700">${fmtNum((r.total_penerimaan||0)+(r.total_mutasi_masuk||0),0)}</td>
@@ -757,7 +758,7 @@ async function pageStok() {
           : '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">OK</span>'}</td>
       </tr>`;
     });
-    if (!pageData.length) html += `<tr><td colspan="12" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
+    if (!pageData.length) html += `<tr><td colspan="13" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
     html += '</tbody></table></div>';
 
     if (total > 0) {
