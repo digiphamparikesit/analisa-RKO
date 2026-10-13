@@ -602,13 +602,16 @@ async function pageDashboard() {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="bg-white rounded-xl shadow p-4">
         <div class="font-semibold text-sm text-slate-700 mb-2">Top 10 Pemakaian Bulan Ini</div>
-        <canvas id="chart-top" height="220"></canvas>
+        <div style="height:280px; position:relative;">
+          <canvas id="chart-top"></canvas>
+        </div>
       </div>
       <div class="bg-white rounded-xl shadow p-4">
         <div class="font-semibold text-sm text-slate-700 mb-2">Tren Capaian RKO 6 Bulan</div>
-        <canvas id="chart-tren" height="220"></canvas>
+        <div style="height:280px; position:relative;">
+          <canvas id="chart-tren"></canvas>
+        </div>
       </div>
-    </div>
   `;
 
   const pid = window.activePeriodId;
