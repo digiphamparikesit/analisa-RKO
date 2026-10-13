@@ -832,6 +832,7 @@ async function pageAnalisa() {
         <button data-tab="cover" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Stock Cover</button>
         <button data-tab="dead"  class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Dead Stock</button>
         <button data-tab="nilai" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Persediaan</button>
+        <button data-tab="unit"  class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Rekap per Unit</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -841,12 +842,12 @@ async function pageAnalisa() {
   const body = document.getElementById('tab-body');
   const selUnit = document.getElementById('a-unit');
   let currentTab = 'rko';
+  let allUnits = [];
 
-  // Load unit + default Gudang Farmasi
-  const units = await TrxPage.loadUnits();
-  const gf = units.find(u => u.tipe === 'gudang_farmasi');
+  allUnits = await TrxPage.loadUnits();
+  const gf = allUnits.find(u => u.tipe === 'gudang_farmasi');
   selUnit.innerHTML = '<option value="">Semua Unit</option>' +
-    units.map(u => `<option value="${u.id}">${esc(u.kode)} — ${esc(u.nama)}</option>`).join('');
+    allUnits.map(u => `<option value="${u.id}">${esc(u.kode)} — ${esc(u.nama)}</option>`).join('');
   selUnit.value = gf?.id || '';
 
   selUnit.onchange = () => renderTab(currentTab);
@@ -868,7 +869,6 @@ async function pageAnalisa() {
 
     const unitId = selUnit.value;
 
-    // --- Tab 1: Capaian RKO (tidak terpengaruh filter unit) ---
     if (name === 'rko') {
       const { data } = await sb.from('v_analisa_rko').select('*').eq('period_id', pid)
         .order('capaian_persen', { ascending:true }).limit(3000);
@@ -880,8 +880,6 @@ async function pageAnalisa() {
         ['nilai_rko','Nilai RKO'], ['nilai_realisasi','Nilai Realisasi'],
       ], 'rko');
     }
-
-    // --- Tab 2: Stock Cover ---
     else if (name === 'cover') {
       let q = sb.from('v_stok').select('*').eq('period_id', pid);
       if (unitId) q = q.eq('unit_id', unitId);
@@ -896,8 +894,6 @@ async function pageAnalisa() {
         ['cover_bulan','Cover (bulan)'],
       ], 'stock-cover');
     }
-
-    // --- Tab 3: Dead Stock ---
     else if (name === 'dead') {
       let q = sb.from('v_stok').select('*').eq('period_id', pid)
         .gt('stok_akhir', 0).eq('total_pemakaian', 0);
@@ -909,8 +905,6 @@ async function pageAnalisa() {
         ['harga_default','Harga'], ['total_pemakaian','Pemakaian'],
       ], 'dead-stock');
     }
-
-    // --- Tab 4: Nilai Persediaan ---
     else if (name === 'nilai') {
       let q = sb.from('v_stok').select('*').eq('period_id', pid);
       if (unitId) q = q.eq('unit_id', unitId);
@@ -929,23 +923,76 @@ async function pageAnalisa() {
         ['qty','Total Qty'], ['nilai','Nilai (Rp)'],
       ], 'nilai-persediaan');
     }
+    else if (name === 'unit') {
+      const { data } = await sb.from('v_stok').select('*').eq('period_id', pid);
+      const agg = {};
+      (data || []).forEach(r => {
+        const key = r.unit_id;
+        if (!agg[key]) {
+          agg[key] = {
+            unit_id: r.unit_id,
+            unit_kode: r.unit_kode,
+            unit_nama: r.unit_nama,
+            unit_tipe: r.unit_tipe,
+            unit_kategori: r.unit_kategori,
+            jml_item: 0,
+            jml_kritis: 0,
+            total_qty: 0,
+            nilai: 0,
+          };
+        }
+        const qty = Number(r.stok_akhir || 0);
+        if (qty !== 0) {
+          agg[key].jml_item += 1;
+          agg[key].total_qty += qty;
+          agg[key].nilai += qty * Number(r.harga_default || 0);
+          if (r.unit_tipe === 'gudang_farmasi' && qty < Number(r.min_stok || 0)) {
+            agg[key].jml_kritis += 1;
+          }
+        }
+      });
+      const rows = Object.values(agg).sort((a,b) => b.nilai - a.nilai);
+
+      body.innerHTML = tableHTML(rows, [
+        ['unit_kode','Kode Unit'],
+        ['unit_nama','Nama Unit'],
+        ['unit_tipe','Tipe'],
+        ['unit_kategori','Kategori'],
+        ['jml_item','Jml Item'],
+        ['jml_kritis','Item Kritis'],
+        ['total_qty','Total Qty'],
+        ['nilai','Nilai (Rp)'],
+      ], 'rekap-unit');
+
+      setTimeout(() => {
+        document.querySelectorAll('[data-unit-detail]').forEach(b => {
+          b.onclick = () => {
+            sessionStorage.setItem('stok-filter-unit', b.dataset.unitDetail);
+            location.hash = '#/stok';
+          };
+        });
+      }, 0);
+    }
   }
 
   function tableHTML(rows, cols, tag) {
     if (!rows.length) return '<div class="text-slate-400 text-sm">Tidak ada data.</div>';
+    const isUnitTab = tag === 'rekap-unit';
     let html = `<div class="mb-2 flex justify-end">
       <button class="btn btn-success" data-export="${tag}">&#11015; Export Excel</button>
     </div>`;
     html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
     cols.forEach(c => html += `<th class="px-2 py-2 text-left">${c[1]}</th>`);
+    if (isUnitTab) html += '<th class="px-2 py-2 w-16">Aksi</th>';
     html += '</tr></thead><tbody>';
+
     rows.forEach(r => {
       html += '<tr class="border-t hover:bg-slate-50">';
       cols.forEach(c => {
         const v = r[c[0]];
         const h = String(c[1]).toLowerCase();
         const isKodeCol = h.includes('kode');
-        const isIntCol  = /qty|nilai|stok|pemakaian|realisasi|total/.test(h);
+        const isIntCol  = /qty|nilai|stok|pemakaian|realisasi|total|jml/.test(h);
         const isNum     = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
         let out = '';
         if (v == null)       out = '';
@@ -955,6 +1002,11 @@ async function pageAnalisa() {
         const rightAlign = isNum && !isKodeCol;
         html += `<td class="px-2 py-1 ${rightAlign ? 'text-right' : ''}">${out}</td>`;
       });
+      if (isUnitTab) {
+        html += `<td class="px-2 py-1">
+          <button data-unit-detail="${r.unit_id}" class="text-blue-700 hover:underline">detail</button>
+        </td>`;
+      }
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -962,7 +1014,7 @@ async function pageAnalisa() {
     setTimeout(() => {
       const btn = document.querySelector(`[data-export="${tag}"]`);
       if (btn) btn.onclick = () => {
-        const unitSuffix = selUnit.value ? '-' + (units.find(u=>u.id==selUnit.value)?.kode || '') : '';
+        const unitSuffix = selUnit.value ? '-' + (allUnits.find(u=>u.id==selUnit.value)?.kode || '') : '';
         const obj = rows.map(r => {
           const o = {}; cols.forEach(c => o[c[1]] = r[c[0]]); return o;
         });
