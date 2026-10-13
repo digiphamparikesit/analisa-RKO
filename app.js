@@ -650,9 +650,14 @@ async function pageStok() {
         </div>
         <div>
           <label class="text-xs text-slate-500">Kategori Item</label>
-          <select id="f-kat" class="w-full border rounded px-2 py-1 text-sm">
-            <option value="">Semua</option><option>Obat</option><option>BMHP</option>
-          </select>
+          <select id="i-kat" class="w-full border rounded px-2 py-1 text-sm">
+  <option value="">Semua Grup</option>
+  <option value="Obat">Obat</option>
+  <option value="BMHP">BMHP</option>
+  <option value="B3">B3</option>
+  <option value="Nutrisi">Nutrisi Enteral</option>
+  <option value="Program">Program</option>
+</select>
         </div>
         <div>
           <label class="text-xs text-slate-500">Cari (kode/nama)</label>
@@ -864,8 +869,13 @@ async function pageMasterItem() {
         <div>
           <label class="text-xs text-slate-500">Kategori</label>
           <select id="i-kat" class="w-full border rounded px-2 py-1 text-sm">
-            <option value="">Semua</option><option>Obat</option><option>BMHP</option>
-          </select>
+  <option value="">Semua Grup</option>
+  <option value="Obat">Obat</option>
+  <option value="BMHP">BMHP</option>
+  <option value="B3">B3</option>
+  <option value="Nutrisi">Nutrisi Enteral</option>
+  <option value="Program">Program</option>
+</select>
         </div>
         <div class="flex items-end">
           <button id="i-search" class="btn btn-primary w-full">Cari</button>
