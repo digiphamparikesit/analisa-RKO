@@ -725,6 +725,10 @@ async function pageStok() {
 
   let currentData = [];
   let page = 1, pageSize = 20;
+  
+  // Auto-apply filter unit dari menu lain
+  const preUnit = sessionStorage.getItem('stok-filter-unit');
+  if (preUnit) { selUnit.value = preUnit; sessionStorage.removeItem('stok-filter-unit'); }
 
   function renderTable() {
     const div = document.getElementById('stok-table');
