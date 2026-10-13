@@ -885,9 +885,12 @@ async function pageAnalisa() {
       if (unitId) q = q.eq('unit_id', unitId);
       const { data } = await q;
       const rows = (data || []).map(r => {
-        const pakai = Number(r.total_pemakaian || 0) || 1;
-        return { ...r, cover_bulan: (Number(r.stok_akhir || 0) / pakai).toFixed(2) };
-      }).sort((a,b) => Number(a.cover_bulan) - Number(b.cover_bulan));
+        const pakai = Number(r.total_pemakaian || 0);
+        const cover = pakai > 0
+          ? (Number(r.stok_akhir || 0) / pakai).toFixed(2)
+          : '-';
+        return { ...r, cover_bulan: cover, _sort: pakai > 0 ? Number(cover) : 99999 };
+      }).sort((a,b) => a._sort - b._sort);
       body.innerHTML = tableHTML(rows, [
         ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'], ['satuan','Satuan'],
         ['stok_akhir','Stok Akhir'], ['total_pemakaian','Pemakaian'],
