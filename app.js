@@ -1024,6 +1024,7 @@ async function pageMasterItem() {
             min_stok: parseNumber(raw.min_stok) ?? 0,
             aktif: true,
           });
+        });
         return out;
       },
       onCommit: async (rows) => {
