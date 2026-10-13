@@ -964,22 +964,35 @@ async function pageMasterItem() {
           };
           let err = null;
           const kode = String(raw.kode).trim().toUpperCase();
+          const katRaw = String(raw.kategori || '').trim().toUpperCase();
+
+          // Normalisasi kategori (case-insensitive)
+          const katMap = {
+            'OBAT': 'Obat',
+            'BMHP': 'BMHP',
+            'PROGRAM TB': 'Obat',
+            'PROGRAM': 'Obat',
+            'ALKES': 'BMHP',
+            'VITAMIN': 'Obat',
+          };
+          const kategori = katMap[katRaw];
+
           if (!kode) err = 'Kode wajib';
           else if (seen.has(kode)) err = 'Kode duplikat di paste';
-          else if (!['Obat','BMHP'].includes(String(raw.kategori).trim())) err = 'Kategori harus Obat/BMHP';
+          else if (!kategori) err = `Kategori "${raw.kategori}" tidak dikenali (harus Obat / BMHP)`;
           else if (!raw.nama) err = 'Nama wajib';
           else if (!raw.satuan) err = 'Satuan wajib';
           if (err) { out.errors.push({ rowNum, raw, msg: err }); return; }
           seen.add(kode);
           out.rows.push({
-            kode, nama: String(raw.nama).trim(),
-            kategori: String(raw.kategori).trim(),
+            kode,
+            nama: String(raw.nama).trim(),
+            kategori,
             satuan: String(raw.satuan).trim(),
             harga_default: parseNumber(raw.harga_default) ?? 0,
             min_stok: parseNumber(raw.min_stok) ?? 0,
             aktif: true,
           });
-        });
         return out;
       },
       onCommit: async (rows) => {
