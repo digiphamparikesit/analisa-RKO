@@ -363,7 +363,10 @@ const TrxPage = (() => {
 
   async function loadItems() {
     if (_cache.items) return _cache.items;
-    const { data } = await sb.from('items').select('id,kode,nama,satuan,kategori').eq('aktif', true);
+    const { data, error } = await sb.from('items')
+      .select('id,kode,nama,satuan,kategori')
+      .limit(50000);
+    if (error) throw error;
     _cache.items = data || [];
     return _cache.items;
   }
