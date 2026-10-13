@@ -898,8 +898,18 @@ async function pageAnalisa() {
       html += '<tr class="border-t hover:bg-slate-50">';
       cols.forEach(c => {
         const v = r[c[0]];
-        const isNum = typeof v === 'number' || (v !== '' && v !== null && !isNaN(v) && typeof v !== 'boolean');
-        html += `<td class="px-2 py-1 ${isNum ? 'text-right' : ''}">${v == null ? '' : (isNum ? fmtNum(v) : esc(v))}</td>`;
+        const h = String(c[1]).toLowerCase();
+        const isKodeCol = h.includes('kode');
+        // Qty, Nilai, Stok, Pemakaian, Realisasi → integer (tanpa desimal)
+        const isIntCol  = /qty|nilai|stok|pemakaian|realisasi|total/.test(h);
+        const isNum     = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
+        let out = '';
+        if (v == null)       out = '';
+        else if (isKodeCol)  out = esc(v);                  // Kode: tampil apa adanya
+        else if (isNum)      out = isIntCol ? fmtInt(v) : fmtNum(v);
+        else                 out = esc(v);
+        const rightAlign = isNum && !isKodeCol;
+        html += `<td class="px-2 py-1 ${rightAlign ? 'text-right' : ''}">${out}</td>`;
       });
       html += '</tr>';
     });
