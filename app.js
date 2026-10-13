@@ -459,9 +459,22 @@ const TrxPage = (() => {
         return out;
       },
       onCommit: async (rows) => {
+        const TABLE_FIELDS = {
+          rko:         ['period_id','item_id','qty_rko','harga_rko','ket'],
+          penerimaan:  ['period_id','item_id','tanggal','no_faktur','supplier','qty','harga','jenis','ket'],
+          mutasi:      ['period_id','item_id','unit_asal_id','unit_tujuan_id','qty','harga','jenis','tanggal','no_dokumen','ket'],
+          pemakaian:   ['period_id','item_id','unit_id','qty','ket'],
+          penyesuaian: ['period_id','item_id','unit_id','qty','alasan'],
+        };
+        const fields = TABLE_FIELDS[cfg.table];
         const clean = rows.map(r => {
-          const o = { ...r };
-          Object.keys(o).forEach(k => { if (k.startsWith('_')) delete o[k]; });
+          const o = {};
+          if (fields) {
+            fields.forEach(f => { if (r[f] !== undefined) o[f] = r[f]; });
+          } else {
+            Object.assign(o, r);
+            Object.keys(o).forEach(k => { if (k.startsWith('_')) delete o[k]; });
+          }
           Object.assign(o, cfg.defaults || {});
           return o;
         });
