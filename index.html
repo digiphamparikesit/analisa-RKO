@@ -8,29 +8,37 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  [x-cloak]{display:none!important}
+  .nav-active{background:#1e40af;color:#fff}
+  input,select,textarea{outline:none}
+  input:focus,select:focus,textarea:focus{border-color:#1d4ed8;box-shadow:0 0 0 2px rgba(29,78,216,.15)}
+  table thead th{font-weight:600;color:#475569;background:#f1f5f9}
+  .btn{padding:.4rem .8rem;border-radius:.5rem;font-size:.85rem;font-weight:500;cursor:pointer;transition:.15s}
+  .btn-primary{background:#1d4ed8;color:#fff} .btn-primary:hover{background:#1e40af}
+  .btn-success{background:#15803d;color:#fff} .btn-success:hover{background:#166534}
+  .btn-indigo{background:#4f46e5;color:#fff} .btn-indigo:hover{background:#4338ca}
+  .btn-gray{background:#e2e8f0;color:#334155} .btn-gray:hover{background:#cbd5e1}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+</style>
 </head>
 <body class="bg-slate-100 text-slate-800">
 
-<!-- ============ LOGIN ============ -->
+<!-- LOGIN -->
 <div id="page-login" class="hidden min-h-screen flex items-center justify-center">
   <form id="form-login" class="bg-white p-8 rounded-2xl shadow-xl w-96">
     <h1 class="text-2xl font-bold mb-1 text-blue-800">Analisa RKO</h1>
     <p class="text-sm text-slate-500 mb-6">Rencana Kebutuhan Obat & BMHP</p>
     <label class="block text-sm mb-1">Email</label>
-    <input id="login-email" type="email" required
-           class="w-full border rounded-lg px-3 py-2 mb-4">
+    <input id="login-email" type="email" required class="w-full border rounded-lg px-3 py-2 mb-4">
     <label class="block text-sm mb-1">Password</label>
-    <input id="login-password" type="password" required
-           class="w-full border rounded-lg px-3 py-2 mb-4">
-    <button class="w-full bg-blue-700 hover:bg-blue-800 text-white py-2 rounded-lg">
-      Login
-    </button>
+    <input id="login-password" type="password" required class="w-full border rounded-lg px-3 py-2 mb-4">
+    <button class="w-full bg-blue-700 hover:bg-blue-800 text-white py-2 rounded-lg">Login</button>
     <p id="login-error" class="text-red-600 text-sm mt-3"></p>
   </form>
 </div>
 
-<!-- ============ APP ============ -->
+<!-- APP -->
 <div id="page-app" class="hidden min-h-screen flex">
   <aside class="w-64 bg-blue-900 text-blue-100 flex flex-col">
     <div class="p-4 border-b border-blue-800">
@@ -42,14 +50,12 @@
       <a href="#/dashboard" class="nav block px-3 py-2 rounded">Dashboard</a>
       <a href="#/stok"      class="nav block px-3 py-2 rounded">Stok & Persediaan</a>
       <a href="#/analisa"   class="nav block px-3 py-2 rounded">Analisa</a>
-
       <div class="text-blue-400 text-xs px-3 py-2 mt-4">TRANSAKSI</div>
       <a href="#/rko"         class="nav block px-3 py-2 rounded">RKO</a>
       <a href="#/penerimaan"  class="nav block px-3 py-2 rounded">Penerimaan / Realisasi</a>
       <a href="#/mutasi"      class="nav block px-3 py-2 rounded">Mutasi ke Unit</a>
       <a href="#/pemakaian"   class="nav block px-3 py-2 rounded">Pemakaian Unit</a>
       <a href="#/penyesuaian" class="nav block px-3 py-2 rounded">Penyesuaian / Opname</a>
-
       <div class="text-blue-400 text-xs px-3 py-2 mt-4">MASTER</div>
       <a href="#/item"    class="nav block px-3 py-2 rounded">Item Obat & BMHP</a>
       <a href="#/unit"    class="nav block px-3 py-2 rounded">Unit</a>
@@ -60,7 +66,6 @@
       <button id="btn-logout" class="mt-2 text-red-300 hover:text-red-100">Logout</button>
     </div>
   </aside>
-
   <main class="flex-1 flex flex-col">
     <header class="bg-white border-b px-6 py-3 flex items-center justify-between">
       <h2 id="page-title" class="font-semibold text-lg text-slate-700">Dashboard</h2>
@@ -71,25 +76,6 @@
 </div>
 
 <script src="config.js"></script>
-<script src="assets/js/supabase.js"></script>
-<script src="assets/js/utils.js"></script>
-<script src="assets/js/auth.js"></script>
-<script src="assets/js/router.js"></script>
-<script src="assets/js/paste.js"></script>
-<script src="assets/js/trx-page.js"></script>
-
-<script src="assets/js/pages/dashboard.js"></script>
-<script src="assets/js/pages/stok.js"></script>
-<script src="assets/js/pages/analisa.js"></script>
-<script src="assets/js/pages/master-item.js"></script>
-<script src="assets/js/pages/master-unit.js"></script>
-<script src="assets/js/pages/master-periode.js"></script>
-<script src="assets/js/pages/trx-rko.js"></script>
-<script src="assets/js/pages/trx-penerimaan.js"></script>
-<script src="assets/js/pages/trx-mutasi.js"></script>
-<script src="assets/js/pages/trx-pemakaian.js"></script>
-<script src="assets/js/pages/trx-penyesuaian.js"></script>
-
-<script src="assets/js/app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
