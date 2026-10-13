@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Analisa RKO — Rencana Kebutuhan Obat & BMHP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+<!-- ============ LOGIN ============ -->
+<div id="page-login" class="hidden min-h-screen flex items-center justify-center">
+  <form id="form-login" class="bg-white p-8 rounded-2xl shadow-xl w-96">
+    <h1 class="text-2xl font-bold mb-1 text-blue-800">Analisa RKO</h1>
+    <p class="text-sm text-slate-500 mb-6">Rencana Kebutuhan Obat & BMHP</p>
+    <label class="block text-sm mb-1">Email</label>
+    <input id="login-email" type="email" required
+           class="w-full border rounded-lg px-3 py-2 mb-4">
+    <label class="block text-sm mb-1">Password</label>
+    <input id="login-password" type="password" required
+           class="w-full border rounded-lg px-3 py-2 mb-4">
+    <button class="w-full bg-blue-700 hover:bg-blue-800 text-white py-2 rounded-lg">
+      Login
+    </button>
+    <p id="login-error" class="text-red-600 text-sm mt-3"></p>
+  </form>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="page-app" class="hidden min-h-screen flex">
+  <aside class="w-64 bg-blue-900 text-blue-100 flex flex-col">
+    <div class="p-4 border-b border-blue-800">
+      <div class="font-bold text-white text-lg">Analisa RKO</div>
+      <div class="text-xs text-blue-300">Instalasi Farmasi</div>
+    </div>
+    <nav class="flex-1 p-2 text-sm overflow-auto">
+      <div class="text-blue-400 text-xs px-3 py-2 mt-2">UTAMA</div>
+      <a href="#/dashboard" class="nav block px-3 py-2 rounded">Dashboard</a>
+      <a href="#/stok"      class="nav block px-3 py-2 rounded">Stok & Persediaan</a>
+      <a href="#/analisa"   class="nav block px-3 py-2 rounded">Analisa</a>
+
+      <div class="text-blue-400 text-xs px-3 py-2 mt-4">TRANSAKSI</div>
+      <a href="#/rko"         class="nav block px-3 py-2 rounded">RKO</a>
+      <a href="#/penerimaan"  class="nav block px-3 py-2 rounded">Penerimaan / Realisasi</a>
+      <a href="#/mutasi"      class="nav block px-3 py-2 rounded">Mutasi ke Unit</a>
+      <a href="#/pemakaian"   class="nav block px-3 py-2 rounded">Pemakaian Unit</a>
+      <a href="#/penyesuaian" class="nav block px-3 py-2 rounded">Penyesuaian / Opname</a>
+
+      <div class="text-blue-400 text-xs px-3 py-2 mt-4">MASTER</div>
+      <a href="#/item"    class="nav block px-3 py-2 rounded">Item Obat & BMHP</a>
+      <a href="#/unit"    class="nav block px-3 py-2 rounded">Unit</a>
+      <a href="#/periode" class="nav block px-3 py-2 rounded">Periode</a>
+    </nav>
+    <div class="p-3 border-t border-blue-800 text-xs">
+      <div id="user-email" class="text-blue-200 truncate"></div>
+      <button id="btn-logout" class="mt-2 text-red-300 hover:text-red-100">Logout</button>
+    </div>
+  </aside>
+
+  <main class="flex-1 flex flex-col">
+    <header class="bg-white border-b px-6 py-3 flex items-center justify-between">
+      <h2 id="page-title" class="font-semibold text-lg text-slate-700">Dashboard</h2>
+      <div id="period-info" class="text-sm text-slate-500"></div>
+    </header>
+    <section id="page-content" class="flex-1 p-6 overflow-auto"></section>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="assets/js/supabase.js"></script>
+<script src="assets/js/utils.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/router.js"></script>
+<script src="assets/js/paste.js"></script>
+<script src="assets/js/trx-page.js"></script>
+
+<script src="assets/js/pages/dashboard.js"></script>
+<script src="assets/js/pages/stok.js"></script>
+<script src="assets/js/pages/analisa.js"></script>
+<script src="assets/js/pages/master-item.js"></script>
+<script src="assets/js/pages/master-unit.js"></script>
+<script src="assets/js/pages/master-periode.js"></script>
+<script src="assets/js/pages/trx-rko.js"></script>
+<script src="assets/js/pages/trx-penerimaan.js"></script>
+<script src="assets/js/pages/trx-mutasi.js"></script>
+<script src="assets/js/pages/trx-pemakaian.js"></script>
+<script src="assets/js/pages/trx-penyesuaian.js"></script>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>
