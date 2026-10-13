@@ -101,11 +101,12 @@ const Auth = {
       const errEl    = document.getElementById('login-error');
       errEl.textContent = 'Memproses...';
       try {
-        await Auth.login(email, password);
-        errEl.textContent = '';
-      } catch (err) {
-        errEl.textContent = 'Login gagal: ' + err.message;
-      }
+      await Auth.login(email, password);
+      errEl.textContent = 'Berhasil! Memuat...';
+      setTimeout(() => location.reload(), 300);
+    } catch (err) {
+      errEl.textContent = 'Login gagal: ' + err.message;
+    }
     });
     document.getElementById('btn-logout').onclick = () => {
       if (confirm('Logout dari aplikasi?')) Auth.logout();
