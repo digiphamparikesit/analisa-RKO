@@ -772,7 +772,16 @@ async function pageStok() {
       .forEach(h => html += `<th class="px-2 py-2">${h}</th>`);
     html += '</tr></thead><tbody>';
     pageData.forEach(r => {
+      const pakaiNegatif = Number(r.total_pemakaian || 0) < 0;
       const kritis = Number(r.stok_akhir) < Number(r.min_stok || 0);
+      let statusBadge;
+      if (pakaiNegatif) {
+        statusBadge = '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold" title="Pemakaian negatif — kemungkinan ada pemasukan/mutasi yang belum diinput">PERLU DICEK</span>';
+      } else if (kritis) {
+        statusBadge = '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[10px]">KRITIS</span>';
+      } else {
+        statusBadge = '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">OK</span>';
+      }
       html += `<tr class="border-t hover:bg-slate-50">
         <td class="px-2 py-1">${esc(r.unit_kode)}</td>
         <td class="px-2 py-1">${esc(r.item_kode)}</td>
@@ -786,11 +795,8 @@ async function pageStok() {
         <td class="px-2 py-1 text-right text-red-600">${fmtNum(r.total_pemakaian,0)}</td>
         <td class="px-2 py-1 text-right font-semibold">${fmtNum(r.stok_akhir,0)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
-        <td class="px-2 py-1 text-center">${kritis
-          ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[10px]">KRITIS</span>'
-          : '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">OK</span>'}</td>
+        <td class="px-2 py-1 text-center">${statusBadge}</td>
       </tr>`;
-    });
     if (!pageData.length) html += `<tr><td colspan="13" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
     html += '</tbody></table></div>';
 
