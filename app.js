@@ -45,12 +45,25 @@ const Period = {
       .select('*').order('tahun', { ascending: false }).order('bulan', { ascending: false });
     if (error) throw error;
     Period.list = data || [];
-    const open = Period.list.find(p => p.status === 'open');
-    Period.current = open || Period.list[0] || null;
+    const savedId = Number(localStorage.getItem('active-period-id'));
+    let target = Period.list.find(p => p.id === savedId);
+    if (!target) {
+      target = Period.list.find(p => p.status === 'open') || Period.list[0] || null;
+    }
+    Period.current = target;
     window.activePeriodId = Period.current?.id || null;
     window.activePeriod   = Period.current;
     Period.renderInfo();
     return Period.list;
+  },
+  setActive(id) {
+    const p = Period.list.find(x => x.id === Number(id));
+    if (!p) return;
+    Period.current = p;
+    window.activePeriodId = p.id;
+    window.activePeriod   = p;
+    localStorage.setItem('active-period-id', p.id);
+    Period.renderInfo();
   },
   label(id) {
     const p = Period.list.find(x => x.id === id);
@@ -60,14 +73,31 @@ const Period = {
   },
   renderInfo() {
     const el = document.getElementById('period-info');
-    if (el && Period.current) {
-      el.innerHTML = `Periode aktif: <b>${Period.label(Period.current.id)}</b>
-        <span class="ml-1 text-xs px-2 py-0.5 rounded ${Period.current.status==='open'?'bg-green-100 text-green-700':'bg-slate-200 text-slate-600'}">
-          ${Period.current.status}
-        </span>`;
-    } else if (el) {
+    if (!el) return;
+    if (!Period.list.length) {
       el.innerHTML = '<span class="text-amber-600">Belum ada periode</span>';
+      return;
     }
+    const m = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    const opts = Period.list.map(p => {
+      const sel = p.id === Period.current?.id ? 'selected' : '';
+      const stat = p.status === 'closed' ? ' (closed)' : '';
+      return `<option value="${p.id}" ${sel}>${m[p.bulan]} ${p.tahun}${stat}</option>`;
+    }).join('');
+    const cur = Period.current;
+    const badge = cur?.status === 'open'
+      ? '<span class="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">open</span>'
+      : '<span class="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-600">closed</span>';
+    el.innerHTML = `
+      <span class="text-xs text-slate-400 mr-1">Periode:</span>
+      <select id="period-select" class="border rounded px-2 py-1 text-sm">${opts}</select>
+      ${badge}
+    `;
+    const sel = document.getElementById('period-select');
+    if (sel) sel.onchange = () => {
+      Period.setActive(sel.value);
+      Router.navigate();
+    };
   }
 };
 
