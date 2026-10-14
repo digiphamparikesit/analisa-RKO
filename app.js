@@ -1822,6 +1822,7 @@ async function pageMasterItem() {
         </div>
         <div class="flex items-end gap-2">
           <button id="i-paste" class="btn btn-indigo flex-1">Paste Excel</button>
+          <button id="i-add" class="btn btn-primary flex-1">+ Tambah Item</button>
           <button id="i-export" class="btn btn-success flex-1">Export</button>
         </div>
       </div>
@@ -1891,6 +1892,10 @@ async function pageMasterItem() {
   document.getElementById('i-q').addEventListener('keydown', e => { if (e.key==='Enter'){ page=1; load(); }});
   document.getElementById('i-kat').onchange = () => { page = 1; load(); };
 
+  document.getElementById('i-add').onclick = async () => {
+    const newItem = await showAddItemModal();
+    if (newItem) { page = 1; load(); }
+  };
   document.getElementById('i-paste').onclick = async () => {
     const n = await PasteModal.open({
       title: 'Paste Master Item (Obat & BMHP)',
