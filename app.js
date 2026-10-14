@@ -888,7 +888,7 @@ async function pageStok() {
     const pageData = currentData.slice(from, from + pageSize);
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead class="text-left"><tr>';
-    ['Unit','Kode','Nama Item','Kategori','Satuan','Awal','Masuk','Keluar','Stok Fisik','Pakai','Akhir','Min','Status']
+    ['Unit','Kode','Nama Item','Kategori','Satuan','Awal','Masuk','Keluar','Stok Fisik','Selisih','Akhir','Min','Status']
       .forEach(h => html += `<th class="px-2 py-2">${h}</th>`);
     html += '</tr></thead><tbody>';
     pageData.forEach(r => {
@@ -1050,7 +1050,7 @@ async function pageAnalisa() {
       }).sort((a,b) => a._sort - b._sort);
       body.innerHTML = tableHTML(rows, [
         ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'], ['satuan','Satuan'],
-        ['stok_akhir','Stok Akhir'], ['total_pemakaian','Pemakaian'],
+        ['stok_akhir','Stok Akhir'], ['total_pemakaian','Selisih'],
         ['cover_bulan','Cover (bulan)'],
       ], 'stock-cover');
     }
@@ -1356,7 +1356,7 @@ async function pageAnalisa() {
         ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
         ['satuan','Satuan'], ['stok_awal','Stok Awal'],
         ['total_penerimaan','Penerimaan'], ['total_mutasi_masuk','Mutasi Masuk'],
-        ['opname_qty','Stok Fisik'], ['total_pemakaian','Pemakaian'],
+        ['opname_qty','Stok Fisik'], ['total_pemakaian','Selisih'],
         ['selisih','Tidak Tercatat'], ['nilai_selisih','Nilai Tidak Tercatat (Rp)'],
         ['harga_default','Harga Satuan'],
       ];
@@ -1594,7 +1594,7 @@ async function pageAnalisa() {
         html += '<div style="height:300px; position:relative;" class="mb-4"><canvas id="r-chart"></canvas></div>';
         html += '<div class="mb-2 flex justify-end"><button class="btn btn-success" id="r-export">&#11015; Export Excel</button></div>';
         html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
-        ['Bulan','Jml Item','Stok Awal','Masuk','Keluar','Stok Fisik','Pakai','Nilai (Rp)']
+        ['Bulan','Jml Item','Stok Awal','Masuk','Keluar','Stok Fisik','Selisih','Nilai (Rp)']
           .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
         html += '</tr></thead><tbody>';
         rows.forEach(r => {
@@ -1604,9 +1604,8 @@ async function pageAnalisa() {
             <td class="px-2 py-1 text-right">${fmtInt(r.stok_awal)}</td>
             <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.masuk)}</td>
             <td class="px-2 py-1 text-right text-orange-600">${fmtInt(r.keluar)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.stok_fisik)}</td>
             <td class="px-2 py-1 text-right text-red-600">${fmtInt(r.pakai)}</td>
-            <td class="px-2 py-1 text-right">${fmtInt(r.penyesuaian)}</td>
-            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.stok_akhir)}</td>
             <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.nilai)}</td>
           </tr>`;
         });
@@ -1684,7 +1683,7 @@ async function pageAnalisa() {
         html += '<div style="height:260px; position:relative;" class="mb-4"><canvas id="r-chart"></canvas></div>';
         html += '<div class="mb-2 flex justify-end"><button class="btn btn-success" id="r-export">&#11015; Export Excel</button></div>';
         html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
-        ['Bulan','Stok Awal','Masuk','Keluar','Pakai','Penyesuaian','Stok Akhir','Nilai (Rp)']
+        ['Bulan','Stok Awal','Masuk','Keluar','Stok Fisik','Selisih','Stok Akhir','Nilai (Rp)']
           .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
         html += '</tr></thead><tbody>';
         rows.forEach(r => {
