@@ -33,6 +33,126 @@ function esc(s) {
   })[c]);
 }
 
+// ===================================================
+// MODAL TAMBAH ITEM BARU
+// ===================================================
+async function showAddItemModal() {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4';
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div class="px-6 py-4 border-b flex items-center justify-between">
+          <h3 class="text-lg font-bold">Tambah Item Baru</h3>
+          <button data-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-6 space-y-3">
+          <div>
+            <label class="text-xs text-slate-500">Kode <span class="text-red-500">*</span></label>
+            <input data-f="kode" class="w-full border rounded px-2 py-1 text-sm" placeholder="mis. 1215">
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Nama Item <span class="text-red-500">*</span></label>
+            <input data-f="nama" class="w-full border rounded px-2 py-1 text-sm" placeholder="mis. PARACETAMOL TAB 500MG">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Kategori <span class="text-red-500">*</span></label>
+              <select data-f="kategori" class="w-full border rounded px-2 py-1 text-sm">
+                <option value="OBAT">OBAT</option>
+                <option value="BMHP">BMHP</option>
+                <option value="B3">B3</option>
+                <option value="NUTRISI ENTERAL">NUTRISI ENTERAL</option>
+                <option value="PROGRAM">PROGRAM</option>
+                <option value="PROGRAM TB">PROGRAM TB</option>
+                <option value="PROGRAM HIV">PROGRAM HIV</option>
+                <option value="PROGRAM MALARIA">PROGRAM MALARIA</option>
+                <option value="PROGRAM RABIES">PROGRAM RABIES</option>
+                <option value="PROGRAM COVID">PROGRAM COVID</option>
+                <option value="PROGRAM IMUNISASI">PROGRAM IMUNISASI</option>
+                <option value="PROGRAM STUNTING">PROGRAM STUNTING</option>
+                <option value="PROGRAM BKKBN">PROGRAM BKKBN</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Satuan <span class="text-red-500">*</span></label>
+              <input data-f="satuan" class="w-full border rounded px-2 py-1 text-sm" placeholder="Tablet / Botol / PCS">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Harga Default</label>
+              <input data-f="harga_default" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Min Stok</label>
+              <input data-f="min_stok" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
+            </div>
+          </div>
+          <div data-msg class="text-sm"></div>
+        </div>
+        <div class="px-6 py-3 border-t flex justify-end gap-2">
+          <button data-close class="btn btn-gray">Batal</button>
+          <button data-save class="btn btn-success">Simpan</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const $ = (s) => modal.querySelector(s);
+    modal.querySelectorAll('[data-close]').forEach(b =>
+      b.onclick = () => { modal.remove(); resolve(null); });
+
+    $('[data-f="kode"]').focus();
+
+    $('[data-save]').onclick = async () => {
+      const kode = $('[data-f="kode"]').value.trim().toUpperCase();
+      const nama = $('[data-f="nama"]').value.trim().toUpperCase();
+      const kategori = $('[data-f="kategori"]').value;
+      const satuan = $('[data-f="satuan"]').value.trim().toUpperCase();
+      const harga = Number($('[data-f="harga_default"]').value) || 0;
+      const minStok = Number($('[data-f="min_stok"]').value) || 0;
+
+      if (!kode || !nama || !satuan) {
+        $('[data-msg]').innerHTML = '<span class="text-red-600">Kode, Nama, dan Satuan wajib diisi.</span>';
+        return;
+      }
+
+      let grup = 'Obat';
+      if (kategori === 'BMHP') grup = 'BMHP';
+      else if (kategori === 'B3') grup = 'B3';
+      else if (kategori === 'NUTRISI ENTERAL') grup = 'Nutrisi';
+      else if (kategori.startsWith('PROGRAM')) grup = 'Program';
+
+      const newItem = { kode, nama, kategori, grup, satuan,
+                        harga_default: harga, min_stok: minStok, aktif: true };
+
+      $('[data-save]').disabled = true;
+      $('[data-save]').textContent = 'Menyimpan...';
+
+      const { error } = await sb.from('items').upsert([newItem], { onConflict: 'kode' });
+      if (error) {
+        $('[data-msg]').innerHTML = `<span class="text-red-600">Gagal: ${esc(error.message)}</span>`;
+        $('[data-save]').disabled = false;
+        $('[data-save]').textContent = 'Simpan';
+        return;
+      }
+      TrxPage.clearCache();
+      toast(`Item "${kode}" tersimpan`, 'success');
+      modal.remove();
+      resolve(newItem);
+    };
+
+    // Enter key → save
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        $('[data-save]').click();
+      }
+    });
+  });
+}
+
 function debounce(fn, ms = 300) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
