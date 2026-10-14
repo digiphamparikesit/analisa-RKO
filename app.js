@@ -1040,8 +1040,13 @@ async function pageAnalisa() {
         };
       }).sort((a, b) => b.sudah - a.sudah);
 
+     // Coverage nasional = rata-rata coverage per unit (bukan total kombinasi)
+      const unitsWithOpname = rows.filter(r => r.sudah > 0);
       const totalSudahSemua = rows.reduce((s, r) => s + r.sudah, 0);
-      const totalSeluruhUnit = rows.reduce((s, r) => s + r.total_master, 0);
+      const totalSeluruhUnit = rows.length * (rows[0]?.total_master || 0); // tetap untuk info
+      const pctNasional = unitsWithOpname.length > 0
+        ? unitsWithOpname.reduce((s, r) => s + r.coverage, 0) / unitsWithOpname.length
+        : 0;
       const pctNasional = totalSeluruhUnit > 0 ? (totalSudahSemua / totalSeluruhUnit * 100) : 0;
       const unitSudahOpname = rows.filter(r => r.sudah > 0).length;
 
@@ -1056,7 +1061,7 @@ async function pageAnalisa() {
           <div class="bg-white border rounded-xl shadow p-4">
             <div class="text-xs text-slate-500">Coverage Nasional</div>
             <div class="text-2xl font-bold text-blue-800 mt-1">${pctNasional.toFixed(1)}%</div>
-            <div class="text-xs text-slate-400 mt-1">${fmtInt(totalSudahSemua)} / ${fmtInt(totalSeluruhUnit)} kombinasi</div>
+            <div class="text-xs text-slate-400 mt-1">rata-rata dari ${unitsWithOpname.length} unit yang sudah opname</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4">
             <div class="text-xs text-slate-500">Unit Sudah Opname</div>
@@ -1066,6 +1071,7 @@ async function pageAnalisa() {
           <div class="bg-white border rounded-xl shadow p-4">
             <div class="text-xs text-slate-500">Total Item Belum Opname</div>
             <div class="text-2xl font-bold text-red-600 mt-1">${fmtInt(totalSeluruhUnit - totalSudahSemua)}</div>
+            <div class="text-xs text-slate-400 mt-1">(total kombinasi jika semua unit diopname)</div>
             <div class="text-xs text-slate-400 mt-1">kombinasi unit × item</div>
           </div>
         </div>
