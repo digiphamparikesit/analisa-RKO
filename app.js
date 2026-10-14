@@ -994,37 +994,43 @@ async function pageAnalisa() {
       }, 0);
     }
 
-       // --- Tab 7: ANOMALI STOK (pemakaian negatif = pemasukan tidak tercatat) ---
+           // --- Tab 7: ANOMALI STOK (pemakaian negatif = pemasukan tidak tercatat) ---
     else if (name === 'anomali') {
       let q = sb.from('v_stok').select('*').eq('period_id', pid).lt('total_pemakaian', 0);
       if (unitId) q = q.eq('unit_id', unitId);
       const { data } = await q;
-      const allRows = (data || []).map(r => ({
-        ...r,
-        selisih: Math.abs(Number(r.total_pemakaian || 0)),
-      })).sort((a,b) => b.selisih - a.selisih);
+      const allRows = (data || []).map(r => {
+        const selisih = Math.abs(Number(r.total_pemakaian || 0));
+        const nilai   = selisih * Number(r.harga_default || 0);
+        return { ...r, selisih, nilai_selisih: nilai };
+      }).sort((a,b) => b.nilai_selisih - a.nilai_selisih);
 
       const totalSelisih = allRows.reduce((s, r) => s + r.selisih, 0);
+      const totalNilai   = allRows.reduce((s, r) => s + r.nilai_selisih, 0);
 
-      // Ringkasan
       const summary = allRows.length
         ? `<div class="mb-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
-             <b>⚠️ ${allRows.length} item</b> dengan pemakaian negatif ·
-             Total <b>${fmtInt(totalSelisih)}</b> unit "tidak tercatat" sebagai pemasukan.<br>
-             <span class="text-red-600">Perlu dicek: kemungkinan ada penerimaan/mutasi yang belum diinput,
-             atau opname salah input (ketik lebih dari fisik sebenarnya).</span>
+             <div class="text-sm font-semibold mb-1">⚠️ ${allRows.length} item dengan pemakaian negatif</div>
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+               <div>Total tidak tercatat: <b>${fmtInt(totalSelisih)}</b> unit</div>
+               <div>Estimasi nilai: <b class="text-red-700">Rp ${fmtInt(totalNilai)}</b></div>
+             </div>
+             <div class="mt-2 text-red-600">
+               Perlu dicek: kemungkinan ada penerimaan/mutasi yang belum diinput,
+               atau opname salah input (ketik lebih dari fisik sebenarnya).
+             </div>
            </div>`
         : `<div class="mb-3 p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800">
              ✅ Tidak ada anomali. Semua pemakaian ≥ 0.
            </div>`;
 
-      // Container + tombol export
       const cols = [
         ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
         ['satuan','Satuan'], ['stok_awal','Stok Awal'],
         ['total_penerimaan','Penerimaan'], ['total_mutasi_masuk','Mutasi Masuk'],
         ['opname_qty','Stok Fisik'], ['total_pemakaian','Pemakaian'],
-        ['selisih','Tidak Tercatat'],
+        ['selisih','Tidak Tercatat'], ['nilai_selisih','Nilai Tidak Tercatat (Rp)'],
+        ['harga_default','Harga Satuan'],
       ];
 
       let html = summary;
@@ -1034,7 +1040,6 @@ async function pageAnalisa() {
       html += '<div id="anomali-table"></div>';
       body.innerHTML = html;
 
-      // Pagination state
       const pageSize = 30;
       let currentPage = 1;
 
@@ -1054,17 +1059,24 @@ async function pageAnalisa() {
           cols.forEach(c => {
             const v = r[c[0]];
             const h = String(c[1]).toLowerCase();
-            const isKodeCol = h.includes('kode');
-            const isNum     = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
+            const isKodeCol   = h.includes('kode') && !h.includes('nilai');
+            const isNum       = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
+            const isSelisih   = h.includes('tidak tercatat') && !h.includes('nilai');
+            const isNilai     = h.includes('nilai tidak tercatat');
+            const isPemakaian = h.includes('pemakaian');
+
             let out = '';
             if (v == null)      out = '';
             else if (isKodeCol) out = esc(v);
             else if (isNum)     out = fmtInt(v);
             else                out = esc(v);
-            // Warnai kolom "Tidak Tercatat" merah
-            const isSelisih = h.includes('tidak tercatat');
-            const cls = isSelisih ? 'text-right text-red-700 font-semibold'
-                                  : (isNum && !isKodeCol ? 'text-right' : '');
+
+            let cls = '';
+            if (isSelisih)          cls = 'text-right text-red-700 font-semibold';
+            else if (isNilai)       cls = 'text-right text-red-700 font-bold';
+            else if (isPemakaian)   cls = 'text-right text-red-600';
+            else if (isNum && !isKodeCol) cls = 'text-right';
+
             t += `<td class="px-2 py-1 ${cls}">${out}</td>`;
           });
           t += '</tr>';
@@ -1093,7 +1105,6 @@ async function pageAnalisa() {
 
       renderTable();
 
-      // Export semua baris (bukan cuma 30 yang tampil)
       const btnExp = document.getElementById('anomali-export');
       if (btnExp) btnExp.onclick = () => {
         const obj = allRows.map(r => {
