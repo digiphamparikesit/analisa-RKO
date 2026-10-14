@@ -797,6 +797,7 @@ async function pageStok() {
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
         <td class="px-2 py-1 text-center">${statusBadge}</td>
       </tr>`;
+     }); 
     if (!pageData.length) html += `<tr><td colspan="13" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
     html += '</tbody></table></div>';
 
