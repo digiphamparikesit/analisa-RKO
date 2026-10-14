@@ -992,6 +992,8 @@ async function pageAnalisa() {
         <button data-tab="riwayat" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Riwayat Stok</button>
         <button data-tab="anomali" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Anomali Stok</button>
         <button data-tab="coverage" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Coverage</button>
+        <button data-tab="opname" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Opname</button>
+        <button data-tab="status-opname" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Status Opname</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -1122,6 +1124,202 @@ async function pageAnalisa() {
       }, 0);
     }
 
+          // --- Tab 9: NILAI OPNAME PER UNIT (murni dari tabel opname) ---
+    else if (name === 'opname') {
+      body.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
+      const { data, error } = await sb.from('v_opname_summary')
+        .select('*').eq('period_id', pid)
+        .order('total_nilai', { ascending: false });
+      if (error) { body.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
+      const rows = (data || []).map(r => ({
+        ...r, total_qty: Number(r.total_qty||0), total_nilai: Number(r.total_nilai||0),
+      }));
+      const totalItem = rows.reduce((s,r) => s + Number(r.jml_item), 0);
+      const totalQty = rows.reduce((s,r) => s + r.total_qty, 0);
+      const totalNilai = rows.reduce((s,r) => s + r.total_nilai, 0);
+      let html = `
+        <div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+          ℹ️ Menu ini <b>murni dari data opname</b> yang Anda upload per unit.
+          Tidak dicampur dengan data mutasi atau carry-over bulan sebelumnya.
+          Cocok untuk <b>bandingkan langsung dengan aplikasi SIM RS</b>.
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Nilai Opname</div>
+            <div class="text-2xl font-bold text-green-700 mt-1">Rp ${fmtInt(totalNilai)}</div>
+            <div class="text-xs text-slate-400 mt-1">${rows.length} unit dengan opname</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Item Diopname</div>
+            <div class="text-2xl font-bold text-blue-800 mt-1">${fmtInt(totalItem)}</div>
+            <div class="text-xs text-slate-400 mt-1">baris opname (semua unit)</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Qty</div>
+            <div class="text-2xl font-bold text-slate-700 mt-1">${fmtInt(totalQty)}</div>
+            <div class="text-xs text-slate-400 mt-1">unit satuan</div>
+          </div>
+        </div>
+        <div class="mb-2 flex justify-end">
+          <button class="btn btn-success" id="opname-export">&#11015; Export Excel</button>
+        </div>
+        <div class="table-scroll">
+          <table class="w-full text-xs"><thead><tr>
+            <th class="px-2 py-2 text-left">Kode Unit</th>
+            <th class="px-2 py-2 text-left">Nama Unit</th>
+            <th class="px-2 py-2 text-left">Tipe</th>
+            <th class="px-2 py-2 text-left">Kategori</th>
+            <th class="px-2 py-2 text-right">Jml Item</th>
+            <th class="px-2 py-2 text-right">Total Qty</th>
+            <th class="px-2 py-2 text-right">Nilai Opname (Rp)</th>
+            <th class="px-2 py-2 text-right">% dari Total</th>
+          </tr></thead><tbody>
+      `;
+      if (!rows.length) {
+        html += `<tr><td colspan="8" class="p-6 text-center text-slate-400">Belum ada data opname untuk periode ini.</td></tr>`;
+      } else {
+        rows.forEach(r => {
+          const pct = totalNilai > 0 ? (r.total_nilai / totalNilai * 100) : 0;
+          html += `<tr class="border-t hover:bg-slate-50">
+            <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
+            <td class="px-2 py-1">${esc(r.unit_nama)}</td>
+            <td class="px-2 py-1">${esc(r.unit_tipe)}</td>
+            <td class="px-2 py-1">${esc(r.unit_kategori)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.jml_item)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.total_qty)}</td>
+            <td class="px-2 py-1 text-right font-semibold text-green-700">${fmtInt(r.total_nilai)}</td>
+            <td class="px-2 py-1 text-right text-slate-500">${pct.toFixed(1)}%</td>
+          </tr>`;
+        });
+        html += `<tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+          <td colspan="4" class="px-2 py-2">TOTAL</td>
+          <td class="px-2 py-2 text-right">${fmtInt(totalItem)}</td>
+          <td class="px-2 py-2 text-right">${fmtInt(totalQty)}</td>
+          <td class="px-2 py-2 text-right text-green-700">${fmtInt(totalNilai)}</td>
+          <td class="px-2 py-2 text-right">100.0%</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+      const btnExp = document.getElementById('opname-export');
+      if (btnExp) btnExp.onclick = () => {
+        const obj = rows.map(r => ({
+          'Kode Unit': r.unit_kode, 'Nama Unit': r.unit_nama,
+          'Tipe': r.unit_tipe, 'Kategori': r.unit_kategori,
+          'Jml Item': r.jml_item, 'Total Qty': r.total_qty,
+          'Nilai Opname (Rp)': r.total_nilai,
+        }));
+        const ws = XLSX.utils.json_to_sheet(obj);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Nilai Opname');
+        XLSX.writeFile(wb, `nilai-opname-${Period.label(pid) || ''}.xlsx`);
+      };
+    }
+
+          // --- Tab 10: STATUS OPNAME (mana unit sudah/belum upload) ---
+    else if (name === 'status-opname') {
+      body.innerHTML = '<div class="text-slate-500 text-sm">Memuat status...</div>';
+      const [opRes, iuRes] = await Promise.all([
+        sb.from('opname').select('unit_id').eq('period_id', pid).limit(500000),
+        sb.from('item_unit').select('unit_id').eq('aktif', true).limit(500000),
+      ]);
+      if (opRes.error) { body.innerHTML = `<div class="text-red-600">${esc(opRes.error.message)}</div>`; return; }
+      if (iuRes.error) { body.innerHTML = `<div class="text-red-600">${esc(iuRes.error.message)}</div>`; return; }
+      const opCount = {};
+      (opRes.data || []).forEach(r => { opCount[r.unit_id] = (opCount[r.unit_id]||0)+1; });
+      const iuCount = {};
+      (iuRes.data || []).forEach(r => { iuCount[r.unit_id] = (iuCount[r.unit_id]||0)+1; });
+      const rows = allUnits.map(u => {
+        const sudah = opCount[u.id] || 0;
+        const terdaftar = iuCount[u.id] || 0;
+        return { unit_id: u.id, unit_kode: u.kode, unit_nama: u.nama,
+          unit_kategori: u.kategori, sudah_upload: sudah, item_terdaftar: terdaftar,
+          pct: terdaftar > 0 ? (sudah / terdaftar * 100) : null,
+          status: sudah > 0 ? 'sudah' : 'belum' };
+      }).sort((a, b) => {
+        if (a.status === 'sudah' && b.status !== 'sudah') return -1;
+        if (a.status !== 'sudah' && b.status === 'sudah') return 1;
+        return b.sudah_upload - a.sudah_upload;
+      });
+      const sudahCount = rows.filter(r => r.status === 'sudah').length;
+      const belumCount = rows.filter(r => r.status === 'belum').length;
+      const totalBaris = rows.reduce((s,r) => s + r.sudah_upload, 0);
+      let html = `
+        <div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+          ℹ️ Halaman ini menunjukkan <b>unit mana yang sudah/belum upload data opname</b>.
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div class="bg-green-50 border border-green-200 rounded-xl shadow p-4">
+            <div class="text-xs text-green-700 font-semibold">✅ Sudah Upload</div>
+            <div class="text-2xl font-bold text-green-800 mt-1">${sudahCount} <span class="text-sm font-normal">/ ${rows.length} unit</span></div>
+            <div class="text-xs text-green-600 mt-1">${fmtInt(totalBaris)} baris opname total</div>
+          </div>
+          <div class="bg-red-50 border border-red-200 rounded-xl shadow p-4">
+            <div class="text-xs text-red-700 font-semibold">❌ Belum Upload</div>
+            <div class="text-2xl font-bold text-red-800 mt-1">${belumCount} <span class="text-sm font-normal">/ ${rows.length} unit</span></div>
+            <div class="text-xs text-red-600 mt-1">unit belum ada data opname</div>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-xl shadow p-4">
+            <div class="text-xs text-blue-700 font-semibold">📊 Progress</div>
+            <div class="text-2xl font-bold text-blue-800 mt-1">${rows.length > 0 ? ((sudahCount/rows.length)*100).toFixed(0) : 0}%</div>
+            <div class="text-xs text-blue-600 mt-1">unit sudah mulai opname</div>
+          </div>
+        </div>
+        <div class="mb-2 flex justify-end">
+          <button class="btn btn-success" id="statop-export">&#11015; Export Excel</button>
+        </div>
+        <div class="table-scroll">
+          <table class="w-full text-xs"><thead><tr>
+            <th class="px-2 py-2 text-left">Status</th>
+            <th class="px-2 py-2 text-left">Kode Unit</th>
+            <th class="px-2 py-2 text-left">Nama Unit</th>
+            <th class="px-2 py-2 text-left">Kategori</th>
+            <th class="px-2 py-2 text-right">Baris Opname</th>
+            <th class="px-2 py-2 text-right">Item Terdaftar</th>
+            <th class="px-2 py-2 text-right">Coverage</th>
+          </tr></thead><tbody>
+      `;
+      rows.forEach(r => {
+        const isSudah = r.status === 'sudah';
+        const badge = isSudah
+          ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-semibold">✅ Sudah</span>'
+          : '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-semibold">❌ Belum</span>';
+        let coverBadge = '—';
+        if (r.pct !== null) {
+          const pct = Math.min(100, r.pct);
+          let cls = 'bg-red-100 text-red-700';
+          if (pct >= 80) cls = 'bg-green-100 text-green-700';
+          else if (pct >= 50) cls = 'bg-amber-100 text-amber-800';
+          else if (pct > 0) cls = 'bg-orange-100 text-orange-800';
+          coverBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${cls}">${pct.toFixed(1)}%</span>`;
+        }
+        html += `<tr class="border-t hover:bg-slate-50 ${isSudah?'':'text-slate-400'}">
+          <td class="px-2 py-1">${badge}</td>
+          <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
+          <td class="px-2 py-1">${esc(r.unit_nama)}</td>
+          <td class="px-2 py-1">${esc(r.unit_kategori)}</td>
+          <td class="px-2 py-1 text-right ${isSudah?'font-semibold text-green-700':''}">${fmtInt(r.sudah_upload)}</td>
+          <td class="px-2 py-1 text-right">${fmtInt(r.item_terdaftar)}</td>
+          <td class="px-2 py-1 text-right">${coverBadge}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+      const btnExp = document.getElementById('statop-export');
+      if (btnExp) btnExp.onclick = () => {
+        const obj = rows.map(r => ({
+          'Status': r.status==='sudah'?'Sudah':'Belum',
+          'Kode Unit': r.unit_kode, 'Nama Unit': r.unit_nama,
+          'Kategori': r.unit_kategori, 'Baris Opname': r.sudah_upload,
+          'Item Terdaftar': r.item_terdaftar,
+          'Coverage %': r.pct !== null ? Number(r.pct.toFixed(1)) : '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(obj);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Status Opname');
+        XLSX.writeFile(wb, `status-opname-${Period.label(pid) || ''}.xlsx`);
+      };
+    }
           // --- Tab 8: COVERAGE (peta % opname per unit) ---
     else if (name === 'coverage') {
       body.innerHTML = '<div class="text-slate-500 text-sm">Memuat data coverage...</div>';
