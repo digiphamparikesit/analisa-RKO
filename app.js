@@ -768,7 +768,7 @@ async function pageStok() {
     const pageData = currentData.slice(from, from + pageSize);
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead class="text-left"><tr>';
-    ['Unit','Kode','Nama Item','Kategori','Satuan','Awal','Masuk','Keluar','Pakai','Penyesuaian','Akhir','Min','Status']
+    ['Unit','Kode','Nama Item','Kategori','Satuan','Awal','Masuk','Keluar','Stok Fisik','Pakai','Akhir','Min','Status']
       .forEach(h => html += `<th class="px-2 py-2">${h}</th>`);
     html += '</tr></thead><tbody>';
     pageData.forEach(r => {
@@ -783,7 +783,7 @@ async function pageStok() {
         <td class="px-2 py-1 text-right text-green-700">${fmtNum((r.total_penerimaan||0)+(r.total_mutasi_masuk||0),0)}</td>
         <td class="px-2 py-1 text-right text-orange-600">${fmtNum(r.total_mutasi_keluar,0)}</td>
         <td class="px-2 py-1 text-right text-red-600">${fmtNum(r.total_pemakaian,0)}</td>
-        <td class="px-2 py-1 text-right">${fmtNum(r.total_penyesuaian,0)}</td>
+        <td class="px-2 py-1 text-right">${fmtNum(r.opname_qty,0)}</td>
         <td class="px-2 py-1 text-right font-semibold">${fmtNum(r.stok_akhir,0)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
         <td class="px-2 py-1 text-center">${kritis
@@ -863,6 +863,7 @@ async function pageAnalisa() {
         <button data-tab="nilai"   class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Persediaan</button>
         <button data-tab="unit"    class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Rekap per Unit</button>
         <button data-tab="riwayat" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Riwayat Stok</button>
+        <button data-tab="anomali" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Anomali Stok</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -993,6 +994,41 @@ async function pageAnalisa() {
       }, 0);
     }
 
+       // --- Tab 7: ANOMALI STOK (pemakaian negatif = pemasukan tidak tercatat) ---
+    else if (name === 'anomali') {
+      let q = sb.from('v_stok').select('*').eq('period_id', pid).lt('total_pemakaian', 0);
+      if (unitId) q = q.eq('unit_id', unitId);
+      const { data } = await q;
+      const rows = (data || []).map(r => ({
+        ...r,
+        selisih: Math.abs(Number(r.total_pemakaian || 0)),
+      })).sort((a,b) => b.selisih - a.selisih);
+
+      const totalSelisih = rows.reduce((s, r) => s + r.selisih, 0);
+      const summary = rows.length
+        ? `<div class="mb-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+             <b>⚠️ ${rows.length} item</b> dengan pemakaian negatif ·
+             Total <b>${fmtInt(totalSelisih)}</b> unit "tidak tercatat" sebagai pemasukan.<br>
+             <span class="text-red-600">Perlu dicek: kemungkinan ada penerimaan/mutasi yang belum diinput,
+             atau opname salah input (ketik lebih dari fisik sebenarnya).</span>
+           </div>`
+        : `<div class="mb-3 p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+             ✅ Tidak ada anomali. Semua pemakaian ≥ 0.
+           </div>`;
+
+      body.innerHTML = summary + tableHTML(rows, [
+        ['unit_kode','Unit'],
+        ['item_kode','Kode'],
+        ['item_nama','Nama Item'],
+        ['satuan','Satuan'],
+        ['stok_awal','Stok Awal'],
+        ['total_penerimaan','Penerimaan'],
+        ['total_mutasi_masuk','Mutasi Masuk'],
+        ['opname_qty','Stok Fisik'],
+        ['total_pemakaian','Pemakaian'],
+        ['selisih','Tidak Tercatat'],
+      ], 'anomali-stok');
+    }
     // --- Tab 6: RIWAYAT STOK (2 mode) ---
     else if (name === 'riwayat') {
       body.innerHTML = `
@@ -1142,7 +1178,7 @@ async function pageAnalisa() {
         html += '<div style="height:300px; position:relative;" class="mb-4"><canvas id="r-chart"></canvas></div>';
         html += '<div class="mb-2 flex justify-end"><button class="btn btn-success" id="r-export">&#11015; Export Excel</button></div>';
         html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
-        ['Bulan','Jml Item','Stok Awal','Masuk','Keluar','Pakai','Penyesuaian','Stok Akhir','Nilai (Rp)']
+        ['Bulan','Jml Item','Stok Awal','Masuk','Keluar','Stok Fisik','Pakai','Nilai (Rp)']
           .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
         html += '</tr></thead><tbody>';
         rows.forEach(r => {
@@ -1220,7 +1256,7 @@ async function pageAnalisa() {
           masuk: (r.total_penerimaan || 0) + (r.total_mutasi_masuk || 0),
           keluar: r.total_mutasi_keluar,
           pakai: r.total_pemakaian,
-          penyesuaian: r.total_penyesuaian,
+          stok_fisik: r.opname_qty,
           stok_akhir: r.stok_akhir,
           nilai: Number(r.stok_akhir || 0) * Number(r.harga_default || 0),
         }));
@@ -1242,8 +1278,8 @@ async function pageAnalisa() {
             <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.masuk)}</td>
             <td class="px-2 py-1 text-right text-orange-600">${fmtInt(r.keluar)}</td>
             <td class="px-2 py-1 text-right text-red-600">${fmtInt(r.pakai)}</td>
-            <td class="px-2 py-1 text-right">${fmtInt(r.penyesuaian)}</td>
-            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.stok_akhir)}</td>
+            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.stok_fisik)}</td>
+            <td class="px-2 py-1 text-right text-red-600">${fmtInt(r.pakai)}</td>
             <td class="px-2 py-1 text-right">${fmtInt(r.nilai)}</td>
           </tr>`;
         });
