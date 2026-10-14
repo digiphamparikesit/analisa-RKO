@@ -782,8 +782,8 @@ async function pageStok() {
         <td class="px-2 py-1 text-right">${fmtNum(r.stok_awal,0)}</td>
         <td class="px-2 py-1 text-right text-green-700">${fmtNum((r.total_penerimaan||0)+(r.total_mutasi_masuk||0),0)}</td>
         <td class="px-2 py-1 text-right text-orange-600">${fmtNum(r.total_mutasi_keluar,0)}</td>
-        <td class="px-2 py-1 text-right text-red-600">${fmtNum(r.total_pemakaian,0)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.opname_qty,0)}</td>
+        <td class="px-2 py-1 text-right text-red-600">${fmtNum(r.total_pemakaian,0)}</td>
         <td class="px-2 py-1 text-right font-semibold">${fmtNum(r.stok_akhir,0)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
         <td class="px-2 py-1 text-center">${kritis
