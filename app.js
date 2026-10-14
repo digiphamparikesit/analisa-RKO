@@ -999,15 +999,17 @@ async function pageAnalisa() {
       let q = sb.from('v_stok').select('*').eq('period_id', pid).lt('total_pemakaian', 0);
       if (unitId) q = q.eq('unit_id', unitId);
       const { data } = await q;
-      const rows = (data || []).map(r => ({
+      const allRows = (data || []).map(r => ({
         ...r,
         selisih: Math.abs(Number(r.total_pemakaian || 0)),
       })).sort((a,b) => b.selisih - a.selisih);
 
-      const totalSelisih = rows.reduce((s, r) => s + r.selisih, 0);
-      const summary = rows.length
+      const totalSelisih = allRows.reduce((s, r) => s + r.selisih, 0);
+
+      // Ringkasan
+      const summary = allRows.length
         ? `<div class="mb-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
-             <b>⚠️ ${rows.length} item</b> dengan pemakaian negatif ·
+             <b>⚠️ ${allRows.length} item</b> dengan pemakaian negatif ·
              Total <b>${fmtInt(totalSelisih)}</b> unit "tidak tercatat" sebagai pemasukan.<br>
              <span class="text-red-600">Perlu dicek: kemungkinan ada penerimaan/mutasi yang belum diinput,
              atau opname salah input (ketik lebih dari fisik sebenarnya).</span>
@@ -1016,18 +1018,93 @@ async function pageAnalisa() {
              ✅ Tidak ada anomali. Semua pemakaian ≥ 0.
            </div>`;
 
-      body.innerHTML = summary + tableHTML(rows, [
-        ['unit_kode','Unit'],
-        ['item_kode','Kode'],
-        ['item_nama','Nama Item'],
-        ['satuan','Satuan'],
-        ['stok_awal','Stok Awal'],
-        ['total_penerimaan','Penerimaan'],
-        ['total_mutasi_masuk','Mutasi Masuk'],
-        ['opname_qty','Stok Fisik'],
-        ['total_pemakaian','Pemakaian'],
+      // Container + tombol export
+      const cols = [
+        ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
+        ['satuan','Satuan'], ['stok_awal','Stok Awal'],
+        ['total_penerimaan','Penerimaan'], ['total_mutasi_masuk','Mutasi Masuk'],
+        ['opname_qty','Stok Fisik'], ['total_pemakaian','Pemakaian'],
         ['selisih','Tidak Tercatat'],
-      ], 'anomali-stok');
+      ];
+
+      let html = summary;
+      html += `<div class="mb-2 flex justify-end">
+        <button class="btn btn-success" id="anomali-export">&#11015; Export Excel</button>
+      </div>`;
+      html += '<div id="anomali-table"></div>';
+      body.innerHTML = html;
+
+      // Pagination state
+      const pageSize = 30;
+      let currentPage = 1;
+
+      function renderTable() {
+        const tbl = document.getElementById('anomali-table');
+        const total = allRows.length;
+        const totalPage = Math.max(1, Math.ceil(total / pageSize));
+        if (currentPage > totalPage) currentPage = totalPage;
+        const from = (currentPage - 1) * pageSize;
+        const pageData = allRows.slice(from, from + pageSize);
+
+        let t = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
+        cols.forEach(c => t += `<th class="px-2 py-2 text-left">${c[1]}</th>`);
+        t += '</tr></thead><tbody>';
+        pageData.forEach(r => {
+          t += '<tr class="border-t hover:bg-slate-50">';
+          cols.forEach(c => {
+            const v = r[c[0]];
+            const h = String(c[1]).toLowerCase();
+            const isKodeCol = h.includes('kode');
+            const isNum     = v !== null && v !== '' && !isNaN(v) && typeof v !== 'boolean';
+            let out = '';
+            if (v == null)      out = '';
+            else if (isKodeCol) out = esc(v);
+            else if (isNum)     out = fmtInt(v);
+            else                out = esc(v);
+            // Warnai kolom "Tidak Tercatat" merah
+            const isSelisih = h.includes('tidak tercatat');
+            const cls = isSelisih ? 'text-right text-red-700 font-semibold'
+                                  : (isNum && !isKodeCol ? 'text-right' : '');
+            t += `<td class="px-2 py-1 ${cls}">${out}</td>`;
+          });
+          t += '</tr>';
+        });
+        if (!pageData.length) {
+          t += `<tr><td colspan="${cols.length}" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
+        }
+        t += '</tbody></table></div>';
+
+        if (total > 0) {
+          t += `<div class="p-3 flex items-center justify-between border-t text-sm bg-white">
+            <span>Total: <b>${total}</b> item · Halaman ${currentPage}/${totalPage}</span>
+            <div class="flex gap-2">
+              <button id="anomali-prev" class="btn btn-gray" ${currentPage===1?'disabled':''}>&larr; Prev</button>
+              <button id="anomali-next" class="btn btn-gray" ${currentPage>=totalPage?'disabled':''}>Next &rarr;</button>
+            </div>
+          </div>`;
+        }
+        tbl.innerHTML = t;
+
+        const prevBtn = document.getElementById('anomali-prev');
+        const nextBtn = document.getElementById('anomali-next');
+        if (prevBtn) prevBtn.onclick = () => { currentPage--; renderTable(); };
+        if (nextBtn) nextBtn.onclick = () => { currentPage++; renderTable(); };
+      }
+
+      renderTable();
+
+      // Export semua baris (bukan cuma 30 yang tampil)
+      const btnExp = document.getElementById('anomali-export');
+      if (btnExp) btnExp.onclick = () => {
+        const obj = allRows.map(r => {
+          const o = {}; cols.forEach(c => o[c[1]] = r[c[0]]); return o;
+        });
+        const ws = XLSX.utils.json_to_sheet(obj);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Anomali');
+        const unitSuffix = selUnit.value ? '-' + (allUnits.find(u=>u.id==selUnit.value)?.kode || '') : '';
+        XLSX.writeFile(wb, `anomali-stok${unitSuffix}-${Period.label(pid) || ''}.xlsx`);
+      };
     }
     // --- Tab 6: RIWAYAT STOK (2 mode) ---
     else if (name === 'riwayat') {
