@@ -962,11 +962,8 @@ async function pageAnalisa() {
         const key = r.unit_id;
         if (!agg[key]) {
           agg[key] = {
-            unit_id: r.unit_id,
-            unit_kode: r.unit_kode,
-            unit_nama: r.unit_nama,
-            unit_tipe: r.unit_tipe,
-            unit_kategori: r.unit_kategori,
+            unit_id: r.unit_id, unit_kode: r.unit_kode, unit_nama: r.unit_nama,
+            unit_tipe: r.unit_tipe, unit_kategori: r.unit_kategori,
             jml_item: 0, jml_kritis: 0, total_qty: 0, nilai: 0,
           };
         }
@@ -997,30 +994,39 @@ async function pageAnalisa() {
       }, 0);
     }
 
-    // --- Tab 6: RIWAYAT STOK (BARU) ---
+    // --- Tab 6: RIWAYAT STOK (2 mode) ---
     else if (name === 'riwayat') {
       body.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <div>
+            <label class="text-xs text-slate-500">Tampilkan Riwayat per</label>
+            <select id="r-mode" class="w-full border rounded px-2 py-1 text-sm">
+              <option value="unit">Unit — Nilai Total Stok per Bulan</option>
+              <option value="item">Item — Riwayat 1 Barang</option>
+            </select>
+          </div>
           <div>
             <label class="text-xs text-slate-500">Pilih Unit</label>
             <select id="r-unit" class="w-full border rounded px-2 py-1 text-sm"></select>
           </div>
-          <div>
+          <div id="r-item-wrap" class="hidden relative">
             <label class="text-xs text-slate-500">Pilih Item (ketik untuk cari)</label>
-            <input id="r-item" class="w-full border rounded px-2 py-1 text-sm"
-                   placeholder="Ketik kode atau nama item...">
-            <div id="r-suggest" class="hidden absolute bg-white border rounded shadow-lg max-h-64 overflow-auto z-50 mt-1 text-xs"></div>
+            <input id="r-item" class="w-full border rounded px-2 py-1 text-sm" placeholder="Ketik kode atau nama item...">
+            <div id="r-suggest" class="hidden absolute bg-white border rounded shadow-lg max-h-64 overflow-auto z-50 mt-1 text-xs left-0 right-0"></div>
           </div>
           <div class="flex items-end">
             <button id="r-load" class="btn btn-primary w-full">Tampilkan Riwayat</button>
           </div>
         </div>
-        <div id="r-result" class="text-slate-400 text-sm">Pilih unit & item untuk melihat riwayat.</div>
+        <div id="r-result" class="text-slate-400 text-sm">Memuat...</div>
       `;
 
+      const rMode = document.getElementById('r-mode');
       const rUnit = document.getElementById('r-unit');
+      const rItemWrap = document.getElementById('r-item-wrap');
       const rItem = document.getElementById('r-item');
       const rSug  = document.getElementById('r-suggest');
+      const rResult = document.getElementById('r-result');
 
       rUnit.innerHTML = allUnits.map(u =>
         `<option value="${u.id}">${esc(u.kode)} — ${esc(u.nama)}</option>`
@@ -1030,7 +1036,6 @@ async function pageAnalisa() {
       let selectedItem = null;
       const allItems = await TrxPage.loadItems();
 
-      // Autocomplete item
       rItem.addEventListener('input', () => {
         const q = rItem.value.trim().toUpperCase();
         if (q.length < 2) { rSug.classList.add('hidden'); return; }
@@ -1052,26 +1057,160 @@ async function pageAnalisa() {
           };
         });
       });
+      rItem.addEventListener('blur', () => setTimeout(() => rSug.classList.add('hidden'), 300));
 
-      rItem.addEventListener('blur', () => setTimeout(() => rSug.classList.add('hidden'), 200));
+      function resolveItem() {
+        if (selectedItem) return selectedItem;
+        const q = rItem.value.trim().toUpperCase();
+        if (!q) return null;
+        let found = allItems.find(i => i.kode.toUpperCase() === q);
+        if (!found) found = allItems.find(i =>
+          i.kode.toUpperCase().includes(q) || i.nama.toUpperCase().includes(q));
+        if (found) {
+          selectedItem = { id: found.id, kode: found.kode, nama: found.nama };
+          rItem.value = found.kode + ' — ' + found.nama;
+        }
+        return selectedItem;
+      }
+
+      rMode.onchange = () => {
+        if (rMode.value === 'item') {
+          rItemWrap.classList.remove('hidden');
+          rResult.innerHTML = '<div class="text-slate-400 text-sm">Ketik nama/kode item, lalu klik Tampilkan Riwayat.</div>';
+        } else {
+          rItemWrap.classList.add('hidden');
+          renderUnitHistory(rUnit.value);
+        }
+      };
+
+      rUnit.onchange = () => {
+        if (rMode.value === 'unit') renderUnitHistory(rUnit.value);
+      };
 
       document.getElementById('r-load').onclick = async () => {
         const unitId2 = rUnit.value;
         if (!unitId2) return alert('Pilih unit dulu.');
-        if (!selectedItem) return alert('Pilih item dari daftar (klik salah satu di dropdown).');
+        if (rMode.value === 'item') {
+          const item = resolveItem();
+          if (!item) return alert('Item tidak ditemukan. Ketik kode/nama lalu pilih dari saran.');
+          await renderItemHistory(unitId2, item);
+        } else {
+          await renderUnitHistory(unitId2);
+        }
+      };
 
-        const result = document.getElementById('r-result');
-        result.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
+      // ---------- Render: Riwayat per Unit (Nilai Total per Bulan) ----------
+      async function renderUnitHistory(unitId2) {
+        rResult.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
+        const { data, error } = await sb.from('v_stok')
+          .select('*').eq('unit_id', Number(unitId2))
+          .order('tahun').order('bulan');
+        if (error) { rResult.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
+        if (!data || !data.length) {
+          rResult.innerHTML = '<div class="text-slate-500 text-sm p-3 bg-amber-50 rounded">Belum ada data untuk unit ini.</div>';
+          return;
+        }
+        const agg = {};
+        data.forEach(r => {
+          const key = r.period_id;
+          if (!agg[key]) {
+            agg[key] = {
+              tahun: r.tahun, bulan: r.bulan,
+              stok_awal:0, masuk:0, keluar:0, pakai:0, penyesuaian:0, stok_akhir:0,
+              nilai:0, jml_item:0,
+            };
+          }
+          const qty = Number(r.stok_akhir || 0);
+          agg[key].stok_awal   += Number(r.stok_awal || 0);
+          agg[key].masuk       += Number(r.total_penerimaan||0) + Number(r.total_mutasi_masuk||0);
+          agg[key].keluar      += Number(r.total_mutasi_keluar||0);
+          agg[key].pakai       += Number(r.total_pemakaian||0);
+          agg[key].penyesuaian += Number(r.total_penyesuaian||0);
+          agg[key].stok_akhir  += qty;
+          agg[key].nilai       += qty * Number(r.harga_default||0);
+          if (qty !== 0) agg[key].jml_item += 1;
+        });
 
+        const m = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+        const rows = Object.values(agg)
+          .sort((a,b) => (a.tahun - b.tahun) || (a.bulan - b.bulan))
+          .map(r => ({ ...r, bulan_label: `${m[r.bulan]} ${r.tahun}` }));
+
+        const unitName = allUnits.find(u => u.id === Number(unitId2))?.nama || '';
+        let html = `<div class="mb-3 text-xs text-slate-600">
+          <b>Riwayat Nilai Stok — Unit</b> · <b>${esc(unitName)}</b> · ${rows.length} bulan data
+        </div>`;
+        html += '<div style="height:300px; position:relative;" class="mb-4"><canvas id="r-chart"></canvas></div>';
+        html += '<div class="mb-2 flex justify-end"><button class="btn btn-success" id="r-export">&#11015; Export Excel</button></div>';
+        html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
+        ['Bulan','Jml Item','Stok Awal','Masuk','Keluar','Pakai','Penyesuaian','Stok Akhir','Nilai (Rp)']
+          .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
+        html += '</tr></thead><tbody>';
+        rows.forEach(r => {
+          html += `<tr class="border-t hover:bg-slate-50">
+            <td class="px-2 py-1">${esc(r.bulan_label)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.jml_item)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.stok_awal)}</td>
+            <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.masuk)}</td>
+            <td class="px-2 py-1 text-right text-orange-600">${fmtInt(r.keluar)}</td>
+            <td class="px-2 py-1 text-right text-red-600">${fmtInt(r.pakai)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.penyesuaian)}</td>
+            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.stok_akhir)}</td>
+            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.nilai)}</td>
+          </tr>`;
+        });
+        html += '</tbody></table></div>';
+        rResult.innerHTML = html;
+
+        const ctx = document.getElementById('r-chart');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: rows.map(r => r.bulan_label),
+              datasets: [
+                { label:'Nilai Stok (Rp)', data: rows.map(r => r.nilai),
+                  borderColor:'#15803d', backgroundColor:'rgba(21,128,61,.1)',
+                  fill:true, tension:.3, yAxisID:'y1' },
+                { label:'Stok Akhir (Qty)', data: rows.map(r => r.stok_akhir),
+                  borderColor:'#1d4ed8', backgroundColor:'transparent',
+                  tension:.3, yAxisID:'y' },
+              ]
+            },
+            options: {
+              maintainAspectRatio:false,
+              plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{ size:11 } } } },
+              scales:{
+                y: { type:'linear', position:'left',  beginAtZero:true,
+                     title:{ display:true, text:'Qty' } },
+                y1:{ type:'linear', position:'right', beginAtZero:true,
+                     title:{ display:true, text:'Nilai (Rp)' },
+                     grid:{ drawOnChartArea:false } }
+              }
+            }
+          });
+        }
+        const btn = document.getElementById('r-export');
+        if (btn) btn.onclick = () => {
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Riwayat Unit');
+          XLSX.writeFile(wb, `riwayat-${allUnits.find(u=>u.id==unitId2)?.kode}-nilai.xlsx`);
+        };
+      }
+
+      // ---------- Render: Riwayat per Item ----------
+      async function renderItemHistory(unitId2, item) {
+        rResult.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
         const { data, error } = await sb.from('v_stok')
           .select('*')
           .eq('unit_id', Number(unitId2))
-          .eq('item_id', selectedItem.id)
+          .eq('item_id', item.id)
           .order('tahun').order('bulan');
 
-        if (error) { result.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
+        if (error) { rResult.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
         if (!data || !data.length) {
-          result.innerHTML = `<div class="text-slate-500 text-sm p-3 bg-amber-50 rounded">Belum ada data untuk <b>${esc(selectedItem.nama)}</b> di unit ini.</div>`;
+          rResult.innerHTML = `<div class="text-slate-500 text-sm p-3 bg-amber-50 rounded">Belum ada data untuk <b>${esc(item.nama)}</b> di unit ini.</div>`;
           return;
         }
 
@@ -1087,19 +1226,12 @@ async function pageAnalisa() {
           nilai: Number(r.stok_akhir || 0) * Number(r.harga_default || 0),
         }));
 
+        const unitName = allUnits.find(u => u.id === Number(unitId2))?.nama || '';
         let html = `<div class="mb-3 text-xs text-slate-600">
-          <b>${esc(selectedItem.kode)} — ${esc(selectedItem.nama)}</b>
-          di <b>${esc(allUnits.find(u => u.id === Number(unitId2))?.nama || '')}</b>
-          · ${rows.length} bulan data
+          <b>${esc(item.kode)} — ${esc(item.nama)}</b> di <b>${esc(unitName)}</b> · ${rows.length} bulan data
         </div>`;
-
-        // Grafik
         html += '<div style="height:260px; position:relative;" class="mb-4"><canvas id="r-chart"></canvas></div>';
-
-        // Tabel
-        html += '<div class="mb-2 flex justify-end">';
-        html += '<button class="btn btn-success" id="r-export">&#11015; Export Excel</button>';
-        html += '</div>';
+        html += '<div class="mb-2 flex justify-end"><button class="btn btn-success" id="r-export">&#11015; Export Excel</button></div>';
         html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
         ['Bulan','Stok Awal','Masuk','Keluar','Pakai','Penyesuaian','Stok Akhir','Nilai (Rp)']
           .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
@@ -1117,9 +1249,8 @@ async function pageAnalisa() {
           </tr>`;
         });
         html += '</tbody></table></div>';
-        result.innerHTML = html;
+        rResult.innerHTML = html;
 
-        // Render chart
         const ctx = document.getElementById('r-chart');
         if (ctx) {
           new Chart(ctx, {
@@ -1127,12 +1258,12 @@ async function pageAnalisa() {
             data: {
               labels: rows.map(r => r.bulan_label),
               datasets: [
-                { label: 'Stok Akhir', data: rows.map(r => r.stok_akhir),
+                { label:'Stok Akhir', data: rows.map(r => r.stok_akhir),
                   borderColor:'#1d4ed8', backgroundColor:'rgba(29,78,216,.1)',
                   fill:true, tension:.3 },
-                { label: 'Masuk', data: rows.map(r => r.masuk),
+                { label:'Masuk', data: rows.map(r => r.masuk),
                   borderColor:'#15803d', backgroundColor:'transparent', tension:.3 },
-                { label: 'Pakai', data: rows.map(r => r.pakai),
+                { label:'Pakai', data: rows.map(r => r.pakai),
                   borderColor:'#dc2626', backgroundColor:'transparent', tension:.3 },
               ]
             },
@@ -1143,16 +1274,17 @@ async function pageAnalisa() {
             }
           });
         }
-
-        // Export
         const btn = document.getElementById('r-export');
         if (btn) btn.onclick = () => {
           const ws = XLSX.utils.json_to_sheet(rows);
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, 'Riwayat');
-          XLSX.writeFile(wb, `riwayat-${selectedItem.kode}-${allUnits.find(u=>u.id==unitId2)?.kode}.xlsx`);
+          XLSX.writeFile(wb, `riwayat-${item.kode}-${allUnits.find(u=>u.id==unitId2)?.kode}.xlsx`);
         };
-      };
+      }
+
+      // Auto-load: default mode = unit
+      if (rMode.value === 'unit') await renderUnitHistory(rUnit.value);
     }
   }
 
