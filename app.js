@@ -495,8 +495,7 @@ const TrxPage = (() => {
           rko:         ['period_id','item_id','qty_rko','harga_rko','ket'],
           penerimaan:  ['period_id','item_id','tanggal','no_faktur','supplier','qty','harga','jenis','ket'],
           mutasi:      ['period_id','item_id','unit_asal_id','unit_tujuan_id','qty','harga','jenis','tanggal','no_dokumen','ket'],
-          pemakaian:   ['period_id','item_id','unit_id','qty','ket'],
-          penyesuaian: ['period_id','item_id','unit_id','qty','alasan'],
+          opname:      ['period_id','item_id','unit_id','qty','ket'],
         };
         const fields = TABLE_FIELDS[cfg.table];
         const clean = rows.map(r => {
@@ -670,12 +669,12 @@ async function pageDashboard() {
     : 0;
   document.getElementById('card-rko').textContent = totalCapaian.toFixed(1) + '%';
 
-  const { data: topData } = await sb.from('pemakaian')
-    .select('qty, items(nama)').eq('period_id', pid);
+  const { data: topData } = await sb.from('v_stok')
+    .select('item_nama, total_pemakaian').eq('period_id', pid).gt('total_pemakaian', 0);
   const aggTop = {};
   (topData || []).forEach(r => {
-    const n = r.items?.nama || '(?)';
-    aggTop[n] = (aggTop[n] || 0) + Number(r.qty || 0);
+    const n = r.item_nama || '(?)';
+    aggTop[n] = (aggTop[n] || 0) + Number(r.total_pemakaian || 0);
   });
   const top10 = Object.entries(aggTop).sort((a,b) => b[1]-a[1]).slice(0,10);
 
@@ -1757,15 +1756,14 @@ async function pageMutasi(periodId) {
   });
 }
 
-// ---------- PAGE: TRX PEMAKAIAN ----------
-async function pagePemakaian(periodId) {
+// ---------- PAGE: TRX OPNAME ----------
+async function pageOpname(periodId) {
   await TrxPage.render({
     periodId,
-    title: 'Pemakaian Unit',
-    table: 'pemakaian',
-    upsert: ['period_id','item_id','unit_id'],
+    title: 'Opname — Sisa Fisik Akhir Bulan',
+    table: 'opname',
     query: async (pid) => {
-      const { data, error } = await sb.from('pemakaian')
+      const { data, error } = await sb.from('opname')
         .select('id,qty,ket,item_id,unit_id, items(kode,nama,satuan), units(kode,nama)')
         .eq('period_id', pid).order('id', { ascending:false }).limit(5000);
       return {
@@ -1783,39 +1781,8 @@ async function pagePemakaian(periodId) {
       { key:'item_kode', label:'Kode Item',  type:'item_code', required:true },
       { key:'item_nama', label:'Nama Item' },
       { key:'satuan',    label:'Satuan' },
-      { key:'qty',       label:'Qty Pakai',  type:'number', required:true },
+      { key:'qty',       label:'Sisa Opname', type:'number', required:true },
       { key:'ket',       label:'Ket' },
-    ],
-  });
-}
-
-// ---------- PAGE: TRX PENYESUAIAN ----------
-async function pagePenyesuaian(periodId) {
-  await TrxPage.render({
-    periodId,
-    title: 'Penyesuaian / Opname',
-    table: 'penyesuaian',
-    query: async (pid) => {
-      const { data, error } = await sb.from('penyesuaian')
-        .select('id,qty,alasan,item_id,unit_id, items(kode,nama,satuan), units(kode,nama)')
-        .eq('period_id', pid).order('id', { ascending:false }).limit(3000);
-      return {
-        error,
-        data: (data||[]).map(r => ({
-          id: r.id, unit_kode: r.units?.kode, unit_nama: r.units?.nama,
-          item_kode: r.items?.kode, item_nama: r.items?.nama, satuan: r.items?.satuan,
-          qty: r.qty, alasan: r.alasan,
-        }))
-      };
-    },
-    columns: [
-      { key:'unit_kode', label:'Kode Unit', type:'unit_code', required:true },
-      { key:'unit_nama', label:'Nama Unit' },
-      { key:'item_kode', label:'Kode Item', type:'item_code', required:true },
-      { key:'item_nama', label:'Nama Item' },
-      { key:'satuan',    label:'Satuan' },
-      { key:'qty',       label:'Qty (+/-)', type:'number', required:true },
-      { key:'alasan',    label:'Alasan' },
     ],
   });
 }
@@ -1840,8 +1807,7 @@ async function pagePenyesuaian(periodId) {
   Router.register('rko',         { title:'RKO',                    render: () => pageRKO(window.activePeriodId) });
   Router.register('penerimaan',  { title:'Penerimaan / Realisasi', render: () => pagePenerimaan(window.activePeriodId) });
   Router.register('mutasi',      { title:'Mutasi ke Unit',         render: () => pageMutasi(window.activePeriodId) });
-  Router.register('pemakaian',   { title:'Pemakaian Unit',         render: () => pagePemakaian(window.activePeriodId) });
-  Router.register('penyesuaian', { title:'Penyesuaian / Opname',   render: () => pagePenyesuaian(window.activePeriodId) });
+  Router.register('opname',      { title:'Opname',                 render: () => pageOpname(window.activePeriodId) });
 
   try {
     await Period.load();
