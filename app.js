@@ -871,6 +871,7 @@ async function pageAnalisa() {
         <button data-tab="unit"    class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Rekap per Unit</button>
         <button data-tab="riwayat" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Riwayat Stok</button>
         <button data-tab="anomali" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Anomali Stok</button>
+        <button data-tab="coverage" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Coverage</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -1001,6 +1002,201 @@ async function pageAnalisa() {
       }, 0);
     }
 
+          // --- Tab 8: COVERAGE (peta % opname per unit) ---
+    else if (name === 'coverage') {
+      body.innerHTML = '<div class="text-slate-500 text-sm">Memuat data coverage...</div>';
+
+      // Total item aktif di master
+      const { count: totalMaster, error: errMaster } = await sb.from('items')
+        .select('id', { count: 'exact', head: true }).eq('aktif', true);
+      if (errMaster) { body.innerHTML = `<div class="text-red-600">${esc(errMaster.message)}</div>`; return; }
+
+      // Semua item aktif (untuk detail)
+      const { data: activeItems, error: errItems } = await sb.from('items')
+        .select('id,kode,nama,kategori,satuan').eq('aktif', true).order('nama').limit(10000);
+      if (errItems) { body.innerHTML = `<div class="text-red-600">${esc(errItems.message)}</div>`; return; }
+
+      // Semua opname untuk periode ini
+      const { data: opnameRows, error: errOpname } = await sb.from('opname')
+        .select('unit_id, item_id').eq('period_id', pid).limit(200000);
+      if (errOpname) { body.innerHTML = `<div class="text-red-600">${esc(errOpname.message)}</div>`; return; }
+
+      const activeItemIds = new Set(activeItems.map(i => i.id));
+      const unitOpnameSet = {};
+      (opnameRows || []).forEach(r => {
+        if (!activeItemIds.has(r.item_id)) return;
+        if (!unitOpnameSet[r.unit_id]) unitOpnameSet[r.unit_id] = new Set();
+        unitOpnameSet[r.unit_id].add(r.item_id);
+      });
+
+      const rows = allUnits.map(u => {
+        const set = unitOpnameSet[u.id] || new Set();
+        const sudah = set.size;
+        const belum = totalMaster - sudah;
+        const pct = totalMaster > 0 ? (sudah / totalMaster * 100) : 0;
+        return {
+          unit_id: u.id, unit_kode: u.kode, unit_nama: u.nama, unit_kategori: u.kategori,
+          total_master: totalMaster, sudah, belum, coverage: pct,
+        };
+      }).sort((a, b) => b.sudah - a.sudah);
+
+      const totalSudahSemua = rows.reduce((s, r) => s + r.sudah, 0);
+      const totalSeluruhUnit = rows.reduce((s, r) => s + r.total_master, 0);
+      const pctNasional = totalSeluruhUnit > 0 ? (totalSudahSemua / totalSeluruhUnit * 100) : 0;
+      const unitSudahOpname = rows.filter(r => r.sudah > 0).length;
+
+      function coverColor(pct) {
+        if (pct >= 60) return 'bg-green-100 text-green-700';
+        if (pct >= 20) return 'bg-amber-100 text-amber-800';
+        return 'bg-red-100 text-red-700';
+      }
+
+      let html = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Coverage Nasional</div>
+            <div class="text-2xl font-bold text-blue-800 mt-1">${pctNasional.toFixed(1)}%</div>
+            <div class="text-xs text-slate-400 mt-1">${fmtInt(totalSudahSemua)} / ${fmtInt(totalSeluruhUnit)} kombinasi</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Unit Sudah Opname</div>
+            <div class="text-2xl font-bold text-blue-800 mt-1">${unitSudahOpname} <span class="text-sm text-slate-400">/ ${rows.length}</span></div>
+            <div class="text-xs text-slate-400 mt-1">unit dengan minimal 1 item diopname</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Item Belum Opname</div>
+            <div class="text-2xl font-bold text-red-600 mt-1">${fmtInt(totalSeluruhUnit - totalSudahSemua)}</div>
+            <div class="text-xs text-slate-400 mt-1">kombinasi unit × item</div>
+          </div>
+        </div>
+        <div class="mb-2 flex justify-end">
+          <button class="btn btn-success" id="cover-export">&#11015; Export Excel</button>
+        </div>
+        <div id="cover-table"></div>
+      `;
+      body.innerHTML = html;
+
+      const pageSize = 30;
+      let currentPage = 1;
+
+      function renderCoverageTable() {
+        const tbl = document.getElementById('cover-table');
+        const total = rows.length;
+        const totalPage = Math.max(1, Math.ceil(total / pageSize));
+        if (currentPage > totalPage) currentPage = totalPage;
+        const from = (currentPage - 1) * pageSize;
+        const pageData = rows.slice(from, from + pageSize);
+
+        let t = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
+        ['Kode Unit','Nama Unit','Kategori','Total Master','Sudah Opname','Belum Opname','Coverage %','Aksi']
+          .forEach(h => t += `<th class="px-2 py-2 text-left">${h}</th>`);
+        t += '</tr></thead><tbody>';
+        pageData.forEach(r => {
+          const cls = coverColor(r.coverage);
+          t += `<tr class="border-t hover:bg-slate-50">
+            <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
+            <td class="px-2 py-1">${esc(r.unit_nama)}</td>
+            <td class="px-2 py-1">${esc(r.unit_kategori)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.total_master)}</td>
+            <td class="px-2 py-1 text-right text-green-700 font-semibold">${fmtInt(r.sudah)}</td>
+            <td class="px-2 py-1 text-right text-red-600">${fmtInt(r.belum)}</td>
+            <td class="px-2 py-1 text-center">
+              <span class="px-2 py-0.5 rounded text-[11px] font-semibold ${cls}">${r.coverage.toFixed(1)}%</span>
+            </td>
+            <td class="px-2 py-1">
+              <button data-cover-detail="${r.unit_id}" class="text-blue-700 hover:underline">detail</button>
+            </td>
+          </tr>`;
+        });
+        t += '</tbody></table></div>';
+
+        if (total > 0) {
+          t += `<div class="p-3 flex items-center justify-between border-t text-sm bg-white">
+            <span>Total: <b>${total}</b> unit · Halaman ${currentPage}/${totalPage}</span>
+            <div class="flex gap-2">
+              <button id="cover-prev" class="btn btn-gray" ${currentPage===1?'disabled':''}>&larr; Prev</button>
+              <button id="cover-next" class="btn btn-gray" ${currentPage>=totalPage?'disabled':''}>Next &rarr;</button>
+            </div>
+          </div>`;
+        }
+        tbl.innerHTML = t;
+
+        const prevBtn = document.getElementById('cover-prev');
+        const nextBtn = document.getElementById('cover-next');
+        if (prevBtn) prevBtn.onclick = () => { currentPage--; renderCoverageTable(); };
+        if (nextBtn) nextBtn.onclick = () => { currentPage++; renderCoverageTable(); };
+
+        tbl.querySelectorAll('[data-cover-detail]').forEach(b => {
+          b.onclick = () => showUnitDetail(Number(b.dataset.coverDetail));
+        });
+      }
+
+      function showUnitDetail(unitId) {
+        const unit = allUnits.find(u => u.id === unitId);
+        const set = unitOpnameSet[unitId] || new Set();
+        const belumItems = activeItems.filter(i => !set.has(i.id));
+
+        const tbl = document.getElementById('cover-table');
+        let t = `<div class="mb-3 flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <button id="cover-back" class="text-blue-700 hover:underline text-sm">&larr; Kembali ke Ringkasan</button>
+            <div class="mt-2 text-sm font-semibold">Item Belum Opname — ${esc(unit.kode)} · ${esc(unit.nama)}</div>
+            <div class="text-xs text-slate-500">${fmtInt(belumItems.length)} item belum diopname periode ini</div>
+          </div>
+          <button class="btn btn-success" id="cover-detail-export">&#11015; Export Excel</button>
+        </div>`;
+
+        if (!belumItems.length) {
+          t += '<div class="p-4 bg-green-50 border border-green-200 text-green-800 rounded text-sm">✅ Semua item sudah diopname di unit ini.</div>';
+        } else {
+          t += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
+          ['Kode','Nama Item','Kategori','Satuan'].forEach(h => t += `<th class="px-2 py-2 text-left">${h}</th>`);
+          t += '</tr></thead><tbody>';
+          belumItems.forEach(i => {
+            t += `<tr class="border-t hover:bg-slate-50">
+              <td class="px-2 py-1 font-mono">${esc(i.kode)}</td>
+              <td class="px-2 py-1">${esc(i.nama)}</td>
+              <td class="px-2 py-1">${esc(i.kategori)}</td>
+              <td class="px-2 py-1">${esc(i.satuan)}</td>
+            </tr>`;
+          });
+          t += '</tbody></table></div>';
+        }
+        tbl.innerHTML = t;
+
+        document.getElementById('cover-back').onclick = () => renderCoverageTable();
+        const btnExp = document.getElementById('cover-detail-export');
+        if (btnExp) btnExp.onclick = () => {
+          const obj = belumItems.map(i => ({
+            Kode: i.kode, Nama: i.nama, Kategori: i.kategori, Satuan: i.satuan,
+          }));
+          const ws = XLSX.utils.json_to_sheet(obj);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, unit.kode);
+          XLSX.writeFile(wb, `belum-opname-${unit.kode}-${Period.label(pid) || ''}.xlsx`);
+        };
+      }
+
+      renderCoverageTable();
+
+      const btnCoverExport = document.getElementById('cover-export');
+      if (btnCoverExport) btnCoverExport.onclick = () => {
+        const obj = rows.map(r => ({
+          'Kode Unit': r.unit_kode,
+          'Nama Unit': r.unit_nama,
+          'Kategori': r.unit_kategori,
+          'Total Master': r.total_master,
+          'Sudah Opname': r.sudah,
+          'Belum Opname': r.belum,
+          'Coverage %': Number(r.coverage.toFixed(1)),
+        }));
+        const ws = XLSX.utils.json_to_sheet(obj);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Coverage');
+        XLSX.writeFile(wb, `coverage-opname-${Period.label(pid) || ''}.xlsx`);
+      };
+    }
+      
            // --- Tab 7: ANOMALI STOK (pemakaian negatif = pemasukan tidak tercatat) ---
     else if (name === 'anomali') {
       let q = sb.from('v_stok').select('*').eq('period_id', pid).lt('total_pemakaian', 0);
