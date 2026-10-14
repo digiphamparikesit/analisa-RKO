@@ -1047,7 +1047,6 @@ async function pageAnalisa() {
       const pctNasional = unitsWithOpname.length > 0
         ? unitsWithOpname.reduce((s, r) => s + r.coverage, 0) / unitsWithOpname.length
         : 0;
-      const pctNasional = totalSeluruhUnit > 0 ? (totalSudahSemua / totalSeluruhUnit * 100) : 0;
       const unitSudahOpname = rows.filter(r => r.sudah > 0).length;
 
       function coverColor(pct) {
