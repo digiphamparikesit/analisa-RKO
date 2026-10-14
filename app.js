@@ -1867,7 +1867,7 @@ async function pageMutasi(periodId) {
       };
     },
     columns: [
-      { key:'tanggal',     label:'Tanggal',     type:'date', required:true },
+      { key:'tanggal',     label:'Tanggal',     type:'date' },
       { key:'no_dokumen',  label:'No Dokumen' },
       { key:'item_kode',   label:'Kode Item',   type:'item_code', required:true },
       { key:'item_nama',   label:'Nama Item' },
@@ -1877,6 +1877,16 @@ async function pageMutasi(periodId) {
       { key:'jenis',       label:'Jenis' },
       { key:'ket',         label:'Ket' },
     ],
+  postValidate: (parsed) => {                                    // ← TAMBAH 3
+      if (!parsed.tanggal) {                                       //   BARIS INI
+        const p = Period.list.find(x => x.id === parsed.period_id);
+        if (p) {
+          const m = String(p.bulan).padStart(2, '0');
+          parsed.tanggal = `${p.tahun}-${m}-01`;
+        }
+      }
+      return null;
+    },
   });
 }
 
