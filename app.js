@@ -1338,7 +1338,7 @@ async function pageAnalisa() {
 
       const summary = allRows.length
         ? `<div class="mb-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
-             <div class="text-sm font-semibold mb-1">⚠️ ${allRows.length} item dengan pemakaian negatif</div>
+             <div class="text-sm font-semibold mb-1">⚠️ ${allRows.length} item dengan selisih negatif</div>
              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                <div>Total tidak tercatat: <b>${fmtInt(totalSelisih)}</b> unit</div>
                <div>Estimasi nilai: <b class="text-red-700">Rp ${fmtInt(totalNilai)}</b></div>
