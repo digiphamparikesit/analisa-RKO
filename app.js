@@ -858,11 +858,12 @@ async function pageAnalisa() {
     </div>
     <div class="bg-white rounded-xl shadow mb-4">
       <div class="flex border-b overflow-auto">
-        <button data-tab="rko"   class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Capaian RKO</button>
-        <button data-tab="cover" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Stock Cover</button>
-        <button data-tab="dead"  class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Dead Stock</button>
-        <button data-tab="nilai" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Persediaan</button>
-        <button data-tab="unit"  class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Rekap per Unit</button>
+        <button data-tab="rko"     class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Capaian RKO</button>
+        <button data-tab="cover"   class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Stock Cover</button>
+        <button data-tab="dead"    class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Dead Stock</button>
+        <button data-tab="nilai"   class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Persediaan</button>
+        <button data-tab="unit"    class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Rekap per Unit</button>
+        <button data-tab="riwayat" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Riwayat Stok</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -916,9 +917,7 @@ async function pageAnalisa() {
       const { data } = await q;
       const rows = (data || []).map(r => {
         const pakai = Number(r.total_pemakaian || 0);
-        const cover = pakai > 0
-          ? (Number(r.stok_akhir || 0) / pakai).toFixed(2)
-          : '-';
+        const cover = pakai > 0 ? (Number(r.stok_akhir || 0) / pakai).toFixed(2) : '-';
         return { ...r, cover_bulan: cover, _sort: pakai > 0 ? Number(cover) : 99999 };
       }).sort((a,b) => a._sort - b._sort);
       body.innerHTML = tableHTML(rows, [
@@ -968,10 +967,7 @@ async function pageAnalisa() {
             unit_nama: r.unit_nama,
             unit_tipe: r.unit_tipe,
             unit_kategori: r.unit_kategori,
-            jml_item: 0,
-            jml_kritis: 0,
-            total_qty: 0,
-            nilai: 0,
+            jml_item: 0, jml_kritis: 0, total_qty: 0, nilai: 0,
           };
         }
         const qty = Number(r.stok_akhir || 0);
@@ -985,18 +981,12 @@ async function pageAnalisa() {
         }
       });
       const rows = Object.values(agg).sort((a,b) => b.nilai - a.nilai);
-
       body.innerHTML = tableHTML(rows, [
-        ['unit_kode','Kode Unit'],
-        ['unit_nama','Nama Unit'],
-        ['unit_tipe','Tipe'],
-        ['unit_kategori','Kategori'],
-        ['jml_item','Jml Item'],
-        ['jml_kritis','Item Kritis'],
-        ['total_qty','Total Qty'],
-        ['nilai','Nilai (Rp)'],
+        ['unit_kode','Kode Unit'], ['unit_nama','Nama Unit'],
+        ['unit_tipe','Tipe'], ['unit_kategori','Kategori'],
+        ['jml_item','Jml Item'], ['jml_kritis','Item Kritis'],
+        ['total_qty','Total Qty'], ['nilai','Nilai (Rp)'],
       ], 'rekap-unit');
-
       setTimeout(() => {
         document.querySelectorAll('[data-unit-detail]').forEach(b => {
           b.onclick = () => {
@@ -1005,6 +995,164 @@ async function pageAnalisa() {
           };
         });
       }, 0);
+    }
+
+    // --- Tab 6: RIWAYAT STOK (BARU) ---
+    else if (name === 'riwayat') {
+      body.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label class="text-xs text-slate-500">Pilih Unit</label>
+            <select id="r-unit" class="w-full border rounded px-2 py-1 text-sm"></select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Pilih Item (ketik untuk cari)</label>
+            <input id="r-item" class="w-full border rounded px-2 py-1 text-sm"
+                   placeholder="Ketik kode atau nama item...">
+            <div id="r-suggest" class="hidden absolute bg-white border rounded shadow-lg max-h-64 overflow-auto z-50 mt-1 text-xs"></div>
+          </div>
+          <div class="flex items-end">
+            <button id="r-load" class="btn btn-primary w-full">Tampilkan Riwayat</button>
+          </div>
+        </div>
+        <div id="r-result" class="text-slate-400 text-sm">Pilih unit & item untuk melihat riwayat.</div>
+      `;
+
+      const rUnit = document.getElementById('r-unit');
+      const rItem = document.getElementById('r-item');
+      const rSug  = document.getElementById('r-suggest');
+
+      rUnit.innerHTML = allUnits.map(u =>
+        `<option value="${u.id}">${esc(u.kode)} — ${esc(u.nama)}</option>`
+      ).join('');
+      rUnit.value = gf?.id || allUnits[0]?.id || '';
+
+      let selectedItem = null;
+      const allItems = await TrxPage.loadItems();
+
+      // Autocomplete item
+      rItem.addEventListener('input', () => {
+        const q = rItem.value.trim().toUpperCase();
+        if (q.length < 2) { rSug.classList.add('hidden'); return; }
+        const matches = allItems.filter(i =>
+          i.kode.toUpperCase().includes(q) || i.nama.toUpperCase().includes(q)
+        ).slice(0, 30);
+        if (!matches.length) { rSug.classList.add('hidden'); return; }
+        rSug.innerHTML = matches.map(i =>
+          `<div class="px-3 py-1 hover:bg-blue-50 cursor-pointer" data-id="${i.id}" data-kode="${esc(i.kode)}" data-nama="${esc(i.nama)}">
+            <b class="font-mono">${esc(i.kode)}</b> — ${esc(i.nama)} <span class="text-slate-400">(${esc(i.satuan)})</span>
+          </div>`
+        ).join('');
+        rSug.classList.remove('hidden');
+        rSug.querySelectorAll('div[data-id]').forEach(d => {
+          d.onclick = () => {
+            selectedItem = { id: Number(d.dataset.id), kode: d.dataset.kode, nama: d.dataset.nama };
+            rItem.value = d.dataset.kode + ' — ' + d.dataset.nama;
+            rSug.classList.add('hidden');
+          };
+        });
+      });
+
+      rItem.addEventListener('blur', () => setTimeout(() => rSug.classList.add('hidden'), 200));
+
+      document.getElementById('r-load').onclick = async () => {
+        const unitId2 = rUnit.value;
+        if (!unitId2) return alert('Pilih unit dulu.');
+        if (!selectedItem) return alert('Pilih item dari daftar (klik salah satu di dropdown).');
+
+        const result = document.getElementById('r-result');
+        result.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
+
+        const { data, error } = await sb.from('v_stok')
+          .select('*')
+          .eq('unit_id', Number(unitId2))
+          .eq('item_id', selectedItem.id)
+          .order('tahun').order('bulan');
+
+        if (error) { result.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
+        if (!data || !data.length) {
+          result.innerHTML = `<div class="text-slate-500 text-sm p-3 bg-amber-50 rounded">Belum ada data untuk <b>${esc(selectedItem.nama)}</b> di unit ini.</div>`;
+          return;
+        }
+
+        const m = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+        const rows = data.map(r => ({
+          bulan_label: `${m[r.bulan]} ${r.tahun}`,
+          stok_awal: r.stok_awal,
+          masuk: (r.total_penerimaan || 0) + (r.total_mutasi_masuk || 0),
+          keluar: r.total_mutasi_keluar,
+          pakai: r.total_pemakaian,
+          penyesuaian: r.total_penyesuaian,
+          stok_akhir: r.stok_akhir,
+          nilai: Number(r.stok_akhir || 0) * Number(r.harga_default || 0),
+        }));
+
+        let html = `<div class="mb-3 text-xs text-slate-600">
+          <b>${esc(selectedItem.kode)} — ${esc(selectedItem.nama)}</b>
+          di <b>${esc(allUnits.find(u => u.id === Number(unitId2))?.nama || '')}</b>
+          · ${rows.length} bulan data
+        </div>`;
+
+        // Grafik
+        html += '<div style="height:260px; position:relative;" class="mb-4"><canvas id="r-chart"></canvas></div>';
+
+        // Tabel
+        html += '<div class="mb-2 flex justify-end">';
+        html += '<button class="btn btn-success" id="r-export">&#11015; Export Excel</button>';
+        html += '</div>';
+        html += '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
+        ['Bulan','Stok Awal','Masuk','Keluar','Pakai','Penyesuaian','Stok Akhir','Nilai (Rp)']
+          .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
+        html += '</tr></thead><tbody>';
+        rows.forEach(r => {
+          html += `<tr class="border-t hover:bg-slate-50">
+            <td class="px-2 py-1">${esc(r.bulan_label)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.stok_awal)}</td>
+            <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.masuk)}</td>
+            <td class="px-2 py-1 text-right text-orange-600">${fmtInt(r.keluar)}</td>
+            <td class="px-2 py-1 text-right text-red-600">${fmtInt(r.pakai)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.penyesuaian)}</td>
+            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.stok_akhir)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.nilai)}</td>
+          </tr>`;
+        });
+        html += '</tbody></table></div>';
+        result.innerHTML = html;
+
+        // Render chart
+        const ctx = document.getElementById('r-chart');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: rows.map(r => r.bulan_label),
+              datasets: [
+                { label: 'Stok Akhir', data: rows.map(r => r.stok_akhir),
+                  borderColor:'#1d4ed8', backgroundColor:'rgba(29,78,216,.1)',
+                  fill:true, tension:.3 },
+                { label: 'Masuk', data: rows.map(r => r.masuk),
+                  borderColor:'#15803d', backgroundColor:'transparent', tension:.3 },
+                { label: 'Pakai', data: rows.map(r => r.pakai),
+                  borderColor:'#dc2626', backgroundColor:'transparent', tension:.3 },
+              ]
+            },
+            options: {
+              maintainAspectRatio:false,
+              plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{ size:11 } } } },
+              scales:{ y:{ beginAtZero:true } }
+            }
+          });
+        }
+
+        // Export
+        const btn = document.getElementById('r-export');
+        if (btn) btn.onclick = () => {
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Riwayat');
+          XLSX.writeFile(wb, `riwayat-${selectedItem.kode}-${allUnits.find(u=>u.id==unitId2)?.kode}.xlsx`);
+        };
+      };
     }
   }
 
