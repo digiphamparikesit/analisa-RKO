@@ -527,7 +527,13 @@ const TrxPage = (() => {
     return _cache.units;
   }
   function mapByKode(arr) {
-    const m = new Map(); arr.forEach(x => m.set(x.kode.toUpperCase(), x)); return m;
+    const m = new Map();
+    arr.forEach(x => {
+      if (x.kode) m.set(String(x.kode).trim().toUpperCase(), x);
+      if (x.nama) m.set(String(x.nama).trim().toUpperCase().replace(/\s+/g,' '), x);
+    });
+    return m;
+  }
   }
   function clearCache() { _cache.items = null; _cache.units = null; }
 
@@ -583,11 +589,13 @@ const TrxPage = (() => {
           for (const c of cfg.columns) {
             const v = raw[c.key];
             if (c.type === 'item_code') {
-              const it = iMap.get(String(v).toUpperCase());
+              const key = String(v || '').trim().toUpperCase().replace(/\s+/g,' ');
+              const it = iMap.get(key);
               if (!it) { err = err || `Kode item "${v}" tidak ditemukan`; break; }
               parsed.item_id = it.id; parsed._item = it;
             } else if (c.type === 'unit_code') {
-              const un = uMap.get(String(v).toUpperCase());
+              const key = String(v || '').trim().toUpperCase().replace(/\s+/g,' ');
+              const un = uMap.get(key);
               if (!un) { err = err || `Kode unit "${v}" tidak ditemukan`; break; }
               const idKey = c.idKey || 'unit_id';
               parsed[idKey] = un.id;
