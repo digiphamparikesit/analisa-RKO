@@ -120,8 +120,6 @@ async function showEditItemModal(item) {
       const satuan   = $('[data-f="satuan"]').value.trim().toUpperCase();
       const satuanKemasan = $('[data-f="satuan_kemasan"]').value.trim().toUpperCase() || null;
       const isiKemasan = Number($('[data-f="isi_kemasan"]').value) || 1;
-      const satuanKemasan = $('[data-f="satuan_kemasan"]').value.trim().toUpperCase() || null;
-      const isiKemasan = Number($('[data-f="isi_kemasan"]').value) || 1;
       const hargaBeli = Number($('[data-f="harga_beli"]').value) || 0;
       const hargaJual = Number($('[data-f="harga_jual"]').value) || 0;
       const minStok   = Number($('[data-f="min_stok"]').value) || 0;
@@ -264,6 +262,8 @@ async function showAddItemModal() {
       const nama = $('[data-f="nama"]').value.trim().toUpperCase();
       const kategori = $('[data-f="kategori"]').value;
       const satuan = $('[data-f="satuan"]').value.trim().toUpperCase();
+      const satuanKemasan = $('[data-f="satuan_kemasan"]').value.trim().toUpperCase() || null;
+      const isiKemasan = Number($('[data-f="isi_kemasan"]').value) || 1;
       const hargaBeli = Number($('[data-f="harga_beli"]').value) || 0;
       const hargaJual = Number($('[data-f="harga_jual"]').value) || 0;
       const minStok = Number($('[data-f="min_stok"]').value) || 0;
