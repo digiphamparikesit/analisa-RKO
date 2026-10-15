@@ -783,12 +783,12 @@ async function pageDashboard() {
   document.getElementById('card-items').textContent = itemCount ?? 0;
 
   const { data: stokData } = await sb.from('v_stok')
-    .select('item_id,item_kode,item_nama,satuan,harga_default,min_stok,stok_akhir,unit_tipe')
+    .select('item_id,item_kode,item_nama,satuan,harga_jual,min_stok,stok_akhir,unit_tipe')
     .eq('period_id', pid);
   const rows = stokData || [];
   let nilai = 0; const kritisSet = new Set();
   rows.forEach(r => {
-    nilai += (r.stok_akhir || 0) * (r.harga_default || 0);
+    nilai += (r.stok_akhir || 0) * (r.harga_jual || 0);
     if (r.unit_tipe === 'gudang_farmasi' && r.stok_akhir < (r.min_stok || 0)) kritisSet.add(r.item_id);
   });
   document.getElementById('card-nilai').textContent = 'Rp ' + fmtInt(nilai);
@@ -1076,7 +1076,7 @@ async function pageAnalisa() {
       body.innerHTML = tableHTML(data || [], [
         ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
         ['satuan','Satuan'], ['stok_akhir','Stok Akhir'],
-        ['harga_default','Harga'], ['total_pemakaian','Pemakaian'],
+        ['harga_jual','Harga'], ['total_pemakaian','Pemakaian'],
       ], 'dead-stock');
     }
     else if (name === 'nilai') {
@@ -1085,7 +1085,7 @@ async function pageAnalisa() {
       const { data } = await q;
       const agg = {};
       (data || []).forEach(r => {
-        const v = Number(r.stok_akhir || 0) * Number(r.harga_default || 0);
+        const v = Number(r.stok_akhir || 0) * Number(r.harga_jual || 0);
         const key = r.item_kode + '|' + r.item_nama + '|' + r.satuan;
         if (!agg[key]) agg[key] = { item_kode:r.item_kode, item_nama:r.item_nama, satuan:r.satuan, qty:0, nilai:0 };
         agg[key].qty += Number(r.stok_akhir || 0);
@@ -1113,7 +1113,7 @@ async function pageAnalisa() {
         if (qty !== 0) {
           agg[key].jml_item += 1;
           agg[key].total_qty += qty;
-          agg[key].nilai += qty * Number(r.harga_default || 0);
+          agg[key].nilai += qty * Number(r.harga_jual || 0);
           if (r.unit_tipe === 'gudang_farmasi' && qty < Number(r.min_stok || 0)) {
             agg[key].jml_kritis += 1;
           }
@@ -1539,7 +1539,7 @@ async function pageAnalisa() {
       const { data } = await q;
       const allRows = (data || []).map(r => {
         const selisih = Math.abs(Number(r.total_pemakaian || 0));
-        const nilai   = selisih * Number(r.harga_default || 0);
+        const nilai   = selisih * Number(r.harga_jual || 0);
         return { ...r, selisih, nilai_selisih: nilai };
       }).sort((a,b) => b.nilai_selisih - a.nilai_selisih);
 
@@ -1568,7 +1568,7 @@ async function pageAnalisa() {
         ['total_penerimaan','Penerimaan'], ['total_mutasi_masuk','Mutasi Masuk'],
         ['opname_qty','Stok Fisik'], ['total_pemakaian','Selisih'],
         ['selisih','Tidak Tercatat'], ['nilai_selisih','Nilai Tidak Tercatat (Rp)'],
-        ['harga_default','Harga Satuan'],
+        ['harga_jual','Harga Satuan'],
       ];
 
       let html = summary;
@@ -1788,7 +1788,7 @@ async function pageAnalisa() {
           agg[key].pakai       += Number(r.total_pemakaian||0);
           agg[key].penyesuaian += Number(r.total_penyesuaian||0);
           agg[key].stok_akhir  += qty;
-          agg[key].nilai       += qty * Number(r.harga_default||0);
+          agg[key].nilai       += qty * Number(r.harga_jual||0);
           if (qty !== 0) agg[key].jml_item += 1;
         });
 
@@ -1883,7 +1883,7 @@ async function pageAnalisa() {
           pakai: r.total_pemakaian,
           stok_fisik: r.opname_qty,
           stok_akhir: r.stok_akhir,
-          nilai: Number(r.stok_akhir || 0) * Number(r.harga_default || 0),
+          nilai: Number(r.stok_akhir || 0) * Number(r.harga_jual || 0),
         }));
 
         const unitName = allUnits.find(u => u.id === Number(unitId2))?.nama || '';
@@ -2109,7 +2109,7 @@ async function pageMasterItem() {
   document.getElementById('i-paste').onclick = async () => {
     const n = await PasteModal.open({
       title: 'Paste Master Item (Obat & BMHP)',
-      hint: 'Kolom: kode, nama, kategori, satuan, harga_default, min_stok. Baris pertama (header) otomatis di-skip.',
+      hint: 'Kolom: kode, nama, kategori, satuan, harga_jual, min_stok. Baris pertama (header) otomatis di-skip.',
       columns: [
         { key:'kode',          label:'Kode',     required:true },
         { key:'nama',          label:'Nama',     required:true },
