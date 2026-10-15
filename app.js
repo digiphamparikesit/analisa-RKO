@@ -70,17 +70,27 @@ async function showEditItemModal(item) {
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
+              <label class="text-xs text-slate-500">Satuan Kemasan</label>
+              <input data-f="satuan_kemasan" class="w-full border rounded px-2 py-1 text-sm" placeholder="Box / Botol / Strip">
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Isi per Kemasan</label>
+              <input data-f="isi_kemasan" type="number" class="w-full border rounded px-2 py-1 text-sm" value="1" placeholder="1 box = ? satuan kecil">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
               <label class="text-xs text-slate-500">Harga Beli (HPP)</label>
-              <input data-f="harga_beli" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.harga_beli || 0)}">
+              <input data-f="harga_beli" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
             </div>
             <div>
               <label class="text-xs text-slate-500">Harga Jual</label>
-              <input data-f="harga_jual" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.harga_jual || 0)}">
+              <input data-f="harga_jual" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
             </div>
           </div>
           <div>
             <label class="text-xs text-slate-500">Min Stok</label>
-            <input data-f="min_stok" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.min_stok || 0)}">
+            <input data-f="min_stok" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
           </div>
           <div>
             <label class="flex items-center gap-2 text-sm">
@@ -108,6 +118,10 @@ async function showEditItemModal(item) {
       const nama     = $('[data-f="nama"]').value.trim().toUpperCase();
       const kategori = $('[data-f="kategori"]').value;
       const satuan   = $('[data-f="satuan"]').value.trim().toUpperCase();
+      const satuanKemasan = $('[data-f="satuan_kemasan"]').value.trim().toUpperCase() || null;
+      const isiKemasan = Number($('[data-f="isi_kemasan"]').value) || 1;
+      const satuanKemasan = $('[data-f="satuan_kemasan"]').value.trim().toUpperCase() || null;
+      const isiKemasan = Number($('[data-f="isi_kemasan"]').value) || 1;
       const hargaBeli = Number($('[data-f="harga_beli"]').value) || 0;
       const hargaJual = Number($('[data-f="harga_jual"]').value) || 0;
       const minStok   = Number($('[data-f="min_stok"]').value) || 0;
@@ -129,6 +143,7 @@ async function showEditItemModal(item) {
 
       const { error } = await sb.from('items').update({
         nama, kategori, grup, satuan,
+        satuan_kemasan: satuanKemasan, isi_kemasan: isiKemasan,
         harga_beli: hargaBeli, harga_jual: hargaJual,
         min_stok: minStok, aktif,
       }).eq('id', item.id);
@@ -206,6 +221,16 @@ async function showAddItemModal() {
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
+              <label class="text-xs text-slate-500">Satuan Kemasan</label>
+              <input data-f="satuan_kemasan" class="w-full border rounded px-2 py-1 text-sm" placeholder="Box / Botol / Strip">
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Isi per Kemasan</label>
+              <input data-f="isi_kemasan" type="number" class="w-full border rounded px-2 py-1 text-sm" value="1">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
               <label class="text-xs text-slate-500">Harga Beli (HPP)</label>
               <input data-f="harga_beli" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
             </div>
@@ -255,6 +280,7 @@ async function showAddItemModal() {
       else if (kategori.startsWith('PROGRAM')) grup = 'Program';
 
       const newItem = { kode, nama, kategori, grup, satuan,
+                        satuan_kemasan: satuanKemasan, isi_kemasan: isiKemasan,
                         harga_beli: hargaBeli, harga_jual: hargaJual, min_stok: minStok, aktif: true };
 
       $('[data-save]').disabled = true;
@@ -2198,7 +2224,7 @@ async function pageMasterItem() {
     total = count || 0;
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
-    ['Kode','Nama','Kategori','Satuan','Harga Beli','Harga Jual','Min Stok','Aktif','Aksi'].forEach(h =>
+    ['Kode','Nama','Kategori','Satuan','Kemasan','Isi','Harga Beli','Harga Jual','Min Stok','Aktif','Aksi'].forEach(h =>
       html += `<th class="px-2 py-2 text-left">${h}</th>`);
     html += '</tr></thead><tbody>';
     (data||[]).forEach(r => {
@@ -2207,6 +2233,8 @@ async function pageMasterItem() {
         <td class="px-2 py-1">${esc(r.nama)}</td>
         <td class="px-2 py-1">${esc(r.kategori)}</td>
         <td class="px-2 py-1">${esc(r.satuan)}</td>
+        <td class="px-2 py-1">${esc(r.satuan_kemasan || '-')}</td>
+        <td class="px-2 py-1 text-right">${r.isi_kemasan ? fmtNum(r.isi_kemasan, 0) : '1'}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.harga_beli)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.harga_jual)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
@@ -2217,7 +2245,7 @@ async function pageMasterItem() {
         </td>
       </tr>`;
     });
-    if (!data?.length) html += '<tr><td colspan="9" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
+    if (!data?.length) html += '<tr><td colspan="11" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
     html += '</tbody></table></div>';
     div.innerHTML = html;
 
@@ -2253,13 +2281,15 @@ async function pageMasterItem() {
       title: 'Paste Master Item (Obat & BMHP)',
       hint: 'Kolom: kode, nama, kategori, satuan, harga_jual, min_stok. Baris pertama (header) otomatis di-skip.',
       columns: [
-        { key:'kode',          label:'Kode',     required:true },
-        { key:'nama',          label:'Nama',     required:true },
-        { key:'kategori',      label:'Kategori', required:true },
-        { key:'satuan',        label:'Satuan',   required:true },
-        { key:'harga_beli',    label:'Harga Beli' },
-        { key:'harga_jual',    label:'Harga Jual' },
-        { key:'min_stok',      label:'Min Stok' },
+        { key:'kode',           label:'Kode',            required:true },
+        { key:'nama',           label:'Nama',            required:true },
+        { key:'kategori',       label:'Kategori',        required:true },
+        { key:'satuan',         label:'Satuan',          required:true },
+        { key:'satuan_kemasan', label:'Satuan Kemasan' },
+        { key:'isi_kemasan',    label:'Isi Kemasan' },
+        { key:'harga_beli',     label:'Harga Beli' },
+        { key:'harga_jual',     label:'Harga Jual' },
+        { key:'min_stok',       label:'Min Stok' },
       ],
       validate: async (rows, { parseNumber }) => {
         const out = { rows: [], errors: [] };
@@ -2268,8 +2298,9 @@ async function pageMasterItem() {
           const rowNum = i + 1;
           const raw = {
             kode: cells[0] || '', nama: cells[1] || '', kategori: cells[2] || '',
-            satuan: cells[3] || '', harga_beli: cells[4] || '',
-            harga_jual: cells[5] || '', min_stok: cells[6] || ''
+            satuan: cells[3] || '', satuan_kemasan: cells[4] || '',
+            isi_kemasan: cells[5] || '', harga_beli: cells[6] || '',
+            harga_jual: cells[7] || '', min_stok: cells[8] || ''
           };
           let err = null;
           const kode = String(raw.kode).trim().toUpperCase();
@@ -2310,12 +2341,16 @@ async function pageMasterItem() {
           else if (!raw.satuan) err = 'Satuan wajib';
           if (err) { out.errors.push({ rowNum, raw, msg: err }); return; }
           seen.add(kode);
+          const satuanKemasan = String(raw.satuan_kemasan || '').trim().toUpperCase() || null;
+          const isiKemasan = parseNumber(raw.isi_kemasan) ?? 1;
           out.rows.push({
             kode,
             nama: String(raw.nama).trim(),
             kategori,
             grup,
             satuan: String(raw.satuan).trim(),
+            satuan_kemasan: satuanKemasan,
+            isi_kemasan: isiKemasan,
             harga_beli: parseNumber(raw.harga_beli) ?? 0,
             harga_jual: parseNumber(raw.harga_jual) ?? 0,
             min_stok: parseNumber(raw.min_stok) ?? 0,
