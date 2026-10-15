@@ -708,6 +708,7 @@ const TrxPage = (() => {
           <button id="btn-paste" class="btn btn-indigo">&#128203; Paste dari Excel</button>
           <button id="btn-add" class="btn btn-primary">+ Tambah Baris</button>
           <button id="btn-export" class="btn btn-success">&#11015; Export Excel</button>
+          ${cfg.table === 'rko' ? `<button id="btn-recalc" class="btn btn-gray" title="Hitung ulang konversi kemasan">🔄 Hitung Kemasan</button>` : ''}
         </div>
       </div>
       <div id="trx-table" class="bg-white rounded-xl shadow"></div>
@@ -727,6 +728,41 @@ const TrxPage = (() => {
     };
     document.getElementById('btn-add').onclick = () => addRow(cfg);
     document.getElementById('btn-export').onclick = () => exportData(cfg);
+
+    // Tombol hitung ulang kemasan (khusus RKO)
+    const btnRecalc = document.getElementById('btn-recalc');
+    if (btnRecalc) {
+      btnRecalc.onclick = async () => {
+        if (!confirm('Hitung ulang qty_rko_kecil untuk semua baris RKO berdasarkan isi kemasan di master?')) return;
+        btnRecalc.disabled = true;
+        btnRecalc.textContent = 'Menghitung...';
+        try {
+          // Ambil semua data RKO + isi_kemasan dari master
+          const { data: rows, error } = await sb.from('rko')
+            .select('id,qty_rko,item_id, items(isi_kemasan)')
+            .eq('period_id', cfg.periodId);
+          if (error) throw error;
+
+          let updated = 0;
+          for (const r of rows || []) {
+            const isi = Number(r.items?.isi_kemasan || 1);
+            const kecil = Number(r.qty_rko || 0) * isi;
+            const { error: err2 } = await sb.from('rko')
+              .update({ qty_rko_kecil: kecil })
+              .eq('id', r.id);
+            if (err2) throw err2;
+            updated++;
+          }
+          toast(`${updated} baris dihitung ulang`, 'success');
+          await refresh(cfg);
+        } catch (err) {
+          alert('Gagal: ' + err.message);
+        } finally {
+          btnRecalc.disabled = false;
+          btnRecalc.textContent = '🔄 Hitung Kemasan';
+        }
+      };
+    }
   }
 
   function buildPasteConfig(cfg) {
@@ -780,7 +816,7 @@ const TrxPage = (() => {
       },
       onCommit: async (rows) => {
         const TABLE_FIELDS = {
-          rko:         ['period_id','item_id','qty_rko','harga_rko','ket'],
+          rko:         ['period_id','item_id','qty_rko','harga_rko','satuan_input','qty_rko_kecil','ket'],
           penerimaan:  ['period_id','item_id','tanggal','no_faktur','supplier','qty','harga','jenis','ket'],
           mutasi:      ['period_id','item_id','unit_asal_id','unit_tujuan_id','qty','harga','jenis','tanggal','no_dokumen','ket'],
           opname:      ['period_id','item_id','unit_id','qty','ket'],
@@ -2552,23 +2588,33 @@ async function pageRKO(periodId) {
     defaults: {},
     query: async (pid) => {
       const { data, error } = await sb.from('rko')
-        .select('id,qty_rko,harga_rko,ket,item_id, items(kode,nama,satuan)')
+        .select('id,qty_rko,harga_rko,satuan_input,ket,item_id, items(kode,nama,satuan,satuan_kemasan,isi_kemasan,harga_beli)')
         .eq('period_id', pid).order('id', { ascending:false }).limit(3000);
       return {
         error,
         data: (data||[]).map(r => ({
-          id: r.id, item_kode: r.items?.kode, item_nama: r.items?.nama,
-          satuan: r.items?.satuan, qty_rko: r.qty_rko, harga_rko: r.harga_rko, ket: r.ket,
+          id: r.id,
+          item_kode: r.items?.kode,
+          item_nama: r.items?.nama,
+          satuan: r.items?.satuan,
+          satuan_kemasan: r.items?.satuan_kemasan,
+          isi_kemasan: r.items?.isi_kemasan,
+          qty_rko: r.qty_rko,
+          satuan_input: r.satuan_input || r.items?.satuan_kemasan || r.items?.satuan,
+          harga_rko: r.harga_rko,
+          ket: r.ket,
         }))
       };
     },
     columns: [
-      { key:'item_kode', label:'Kode Item', type:'item_code', required:true },
-      { key:'item_nama', label:'Nama Item' },
-      { key:'satuan',    label:'Satuan' },
-      { key:'qty_rko',   label:'Qty RKO', type:'number', required:true },
-      { key:'harga_rko', label:'Harga',   type:'number' },
-      { key:'ket',       label:'Ket' },
+      { key:'item_kode',     label:'Kode Item',    type:'item_code', required:true },
+      { key:'item_nama',     label:'Nama Item' },
+      { key:'satuan_kemasan',label:'Kemasan' },
+      { key:'qty_rko',       label:'Qty RKO',      type:'number', required:true },
+      { key:'satuan_input',  label:'Satuan Input' },
+      { key:'harga_rko',     label:'Harga Beli',   type:'number' },
+      { key:'isi_kemasan',   label:'Isi' },
+      { key:'ket',           label:'Ket' },
     ],
   });
 }
