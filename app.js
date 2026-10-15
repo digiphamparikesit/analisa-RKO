@@ -1209,6 +1209,7 @@ async function pageAnalisa() {
         <button data-tab="coverage" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Coverage</button>
         <button data-tab="opname" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Opname</button>
         <button data-tab="status-opname" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Status Opname</button>
+        <button data-tab="anomali-unit" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Anomali per Unit</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -1745,6 +1746,134 @@ async function pageAnalisa() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Coverage');
         XLSX.writeFile(wb, `coverage-opname-${Period.label(pid) || ''}.xlsx`);
+      };
+    }
+
+         // --- Tab 11: ANOMALI PER UNIT (rekap nilai barang tidak tercatat per ruangan) ---
+    else if (name === 'anomali-unit') {
+      body.innerHTML = '<div class="text-slate-500 text-sm">Memuat rekap anomali per unit...</div>';
+
+      // Ambil semua data v_stok yang pemakaian negatif
+      const { data, error } = await sb.from('v_stok')
+        .select('unit_id,unit_kode,unit_nama,unit_tipe,item_id,item_nama,item_kode,satuan,harga_jual,total_pemakaian,opname_qty,stok_awal,total_penerimaan,total_mutasi_masuk')
+        .eq('period_id', pid)
+        .lt('total_pemakaian', 0);
+      if (error) { body.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
+
+      // Aggregasi per unit
+      const agg = {};
+      (data || []).forEach(r => {
+        const key = r.unit_id;
+        if (!agg[key]) {
+          agg[key] = {
+            unit_id: r.unit_id,
+            unit_kode: r.unit_kode,
+            unit_nama: r.unit_nama,
+            unit_tipe: r.unit_tipe,
+            jml_item: 0,
+            total_qty_selisih: 0,
+            total_nilai: 0,
+          };
+        }
+        const qty = Math.abs(Number(r.total_pemakaian || 0));
+        const nilai = qty * Number(r.harga_jual || 0);
+        agg[key].jml_item += 1;
+        agg[key].total_qty_selisih += qty;
+        agg[key].total_nilai += nilai;
+      });
+
+      const rows = Object.values(agg).sort((a,b) => b.total_nilai - a.total_nilai);
+      const grandItem = rows.reduce((s,r) => s + r.jml_item, 0);
+      const grandQty  = rows.reduce((s,r) => s + r.total_qty_selisih, 0);
+      const grandNilai= rows.reduce((s,r) => s + r.total_nilai, 0);
+
+      let html = `
+        <div class="mb-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+          ℹ️ Rekap <b>nilai barang tidak tercatat</b> (pemakaian negatif) per unit/ruangan.
+          Nilai dihitung berdasarkan <b>harga jual</b> × qty selisih.
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Item Bermasalah</div>
+            <div class="text-2xl font-bold text-red-600 mt-1">${fmtInt(grandItem)}</div>
+            <div class="text-xs text-slate-400 mt-1">item dari ${rows.length} unit</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Qty Tidak Tercatat</div>
+            <div class="text-2xl font-bold text-orange-600 mt-1">${fmtInt(grandQty)}</div>
+            <div class="text-xs text-slate-400 mt-1">unit satuan</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Nilai Tidak Tercatat</div>
+            <div class="text-2xl font-bold text-red-700 mt-1">Rp ${fmtInt(grandNilai)}</div>
+            <div class="text-xs text-slate-400 mt-1">estimasi (harga jual)</div>
+          </div>
+        </div>
+        <div class="mb-2 flex justify-end">
+          <button class="btn btn-success" id="anomali-unit-export">&#11015; Export Excel</button>
+        </div>
+        <div class="table-scroll">
+          <table class="w-full text-xs"><thead><tr>
+            <th class="px-2 py-2 text-left">Kode Unit</th>
+            <th class="px-2 py-2 text-left">Nama Unit</th>
+            <th class="px-2 py-2 text-left">Tipe</th>
+            <th class="px-2 py-2 text-right">Jml Item</th>
+            <th class="px-2 py-2 text-right">Total Qty</th>
+            <th class="px-2 py-2 text-right">Nilai Tidak Tercatat (Rp)</th>
+            <th class="px-2 py-2 w-16">Aksi</th>
+          </tr></thead><tbody>
+      `;
+
+      if (!rows.length) {
+        html += `<tr><td colspan="7" class="p-6 text-center text-slate-400">✅ Tidak ada anomali di semua unit.</td></tr>`;
+      } else {
+        rows.forEach(r => {
+          html += `<tr class="border-t hover:bg-slate-50">
+            <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
+            <td class="px-2 py-1">${esc(r.unit_nama)}</td>
+            <td class="px-2 py-1">${esc(r.unit_tipe)}</td>
+            <td class="px-2 py-1 text-right font-semibold">${fmtInt(r.jml_item)}</td>
+            <td class="px-2 py-1 text-right text-orange-600">${fmtInt(r.total_qty_selisih)}</td>
+            <td class="px-2 py-1 text-right font-bold text-red-700">${fmtInt(r.total_nilai)}</td>
+            <td class="px-2 py-1 text-center">
+              <button data-anomali-unit-detail="${r.unit_id}" class="text-blue-700 hover:underline">detail</button>
+            </td>
+          </tr>`;
+        });
+        html += `<tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+          <td colspan="3" class="px-2 py-2">TOTAL</td>
+          <td class="px-2 py-2 text-right">${fmtInt(grandItem)}</td>
+          <td class="px-2 py-2 text-right text-orange-600">${fmtInt(grandQty)}</td>
+          <td class="px-2 py-2 text-right text-red-700">${fmtInt(grandNilai)}</td>
+          <td></td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+
+      // Handler klik detail
+      body.querySelectorAll('[data-anomali-unit-detail]').forEach(b => {
+        b.onclick = () => {
+          const uid = Number(b.dataset.anomaliUnitDetail);
+          // Pindah ke tab Anomali & filter unit
+          selUnit.value = String(uid);
+          renderTab('anomali');
+        };
+      });
+
+      // Export Excel
+      const btnExp = document.getElementById('anomali-unit-export');
+      if (btnExp) btnExp.onclick = () => {
+        const obj = rows.map(r => ({
+          'Kode Unit': r.unit_kode, 'Nama Unit': r.unit_nama,
+          'Tipe': r.unit_tipe, 'Jml Item': r.jml_item,
+          'Total Qty': r.total_qty_selisih,
+          'Nilai Tidak Tercatat (Rp)': r.total_nilai,
+        }));
+        const ws = XLSX.utils.json_to_sheet(obj);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Anomali per Unit');
+        XLSX.writeFile(wb, `anomali-per-unit-${Period.label(pid) || ''}.xlsx`);
       };
     }
       
