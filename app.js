@@ -34,6 +34,131 @@ function esc(s) {
 }
 
 // ===================================================
+// MODAL EDIT ITEM
+// ===================================================
+async function showEditItemModal(item) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4';
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div class="px-6 py-4 border-b flex items-center justify-between">
+          <h3 class="text-lg font-bold">Edit Item</h3>
+          <button data-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-6 space-y-3">
+          <div>
+            <label class="text-xs text-slate-500">Kode (tidak bisa diubah)</label>
+            <input data-f="kode" class="w-full border rounded px-2 py-1 text-sm bg-slate-100" value="${esc(item.kode)}" readonly>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Nama Item <span class="text-red-500">*</span></label>
+            <input data-f="nama" class="w-full border rounded px-2 py-1 text-sm" value="${esc(item.nama)}">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Kategori <span class="text-red-500">*</span></label>
+              <select data-f="kategori" class="w-full border rounded px-2 py-1 text-sm">
+                ${['OBAT','BMHP','B3','NUTRISI ENTERAL','PROGRAM','PROGRAM TB','PROGRAM HIV','PROGRAM MALARIA','PROGRAM RABIES','PROGRAM COVID','PROGRAM IMUNISASI','PROGRAM STUNTING','PROGRAM BKKBN']
+                  .map(k => `<option value="${k}" ${item.kategori === k ? 'selected' : ''}>${k}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Satuan <span class="text-red-500">*</span></label>
+              <input data-f="satuan" class="w-full border rounded px-2 py-1 text-sm" value="${esc(item.satuan || '')}">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Harga Beli (HPP)</label>
+              <input data-f="harga_beli" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.harga_beli || 0)}">
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Harga Jual</label>
+              <input data-f="harga_jual" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.harga_jual || 0)}">
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Min Stok</label>
+            <input data-f="min_stok" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.min_stok || 0)}">
+          </div>
+          <div>
+            <label class="flex items-center gap-2 text-sm">
+              <input data-f="aktif" type="checkbox" ${item.aktif ? 'checked' : ''}>
+              <span>Aktif</span>
+            </label>
+          </div>
+          <div data-msg class="text-sm"></div>
+        </div>
+        <div class="px-6 py-3 border-t flex justify-end gap-2">
+          <button data-close class="btn btn-gray">Batal</button>
+          <button data-save class="btn btn-success">Simpan Perubahan</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const $ = (s) => modal.querySelector(s);
+    modal.querySelectorAll('[data-close]').forEach(b =>
+      b.onclick = () => { modal.remove(); resolve(null); });
+
+    $('[data-f="nama"]').focus();
+
+    $('[data-save]').onclick = async () => {
+      const nama     = $('[data-f="nama"]').value.trim().toUpperCase();
+      const kategori = $('[data-f="kategori"]').value;
+      const satuan   = $('[data-f="satuan"]').value.trim().toUpperCase();
+      const hargaBeli = Number($('[data-f="harga_beli"]').value) || 0;
+      const hargaJual = Number($('[data-f="harga_jual"]').value) || 0;
+      const minStok   = Number($('[data-f="min_stok"]').value) || 0;
+      const aktif     = $('[data-f="aktif"]').checked;
+
+      if (!nama || !satuan) {
+        $('[data-msg]').innerHTML = '<span class="text-red-600">Nama dan Satuan wajib diisi.</span>';
+        return;
+      }
+
+      let grup = 'Obat';
+      if (kategori === 'BMHP') grup = 'BMHP';
+      else if (kategori === 'B3') grup = 'B3';
+      else if (kategori === 'NUTRISI ENTERAL') grup = 'Nutrisi';
+      else if (kategori.startsWith('PROGRAM')) grup = 'Program';
+
+      $('[data-save]').disabled = true;
+      $('[data-save]').textContent = 'Menyimpan...';
+
+      const { error } = await sb.from('items').update({
+        nama, kategori, grup, satuan,
+        harga_beli: hargaBeli, harga_jual: hargaJual,
+        min_stok: minStok, aktif,
+      }).eq('id', item.id);
+
+      if (error) {
+        $('[data-msg]').innerHTML = `<span class="text-red-600">Gagal: ${esc(error.message)}</span>`;
+        $('[data-save]').disabled = false;
+        $('[data-save]').textContent = 'Simpan Perubahan';
+        return;
+      }
+      TrxPage.clearCache();
+      toast(`Item "${item.kode}" tersimpan`, 'success');
+      modal.remove();
+      resolve(true);
+    };
+
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        $('[data-save]').click();
+      }
+      if (e.key === 'Escape') {
+        modal.remove();
+        resolve(null);
+      }
+    });
+  });
+}
+
+// ===================================================
 // MODAL TAMBAH ITEM BARU
 // ===================================================
 async function showAddItemModal() {
@@ -2073,18 +2198,22 @@ async function pageMasterItem() {
         <td class="px-2 py-1 text-right">${fmtNum(r.harga_jual)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
         <td class="px-2 py-1 text-center">${r.aktif ? '✓' : '×'}</td>
-        <td class="px-2 py-1"><button data-del="${r.id}" class="text-red-600 hover:underline">hapus</button></td>
+        <td class="px-2 py-1 whitespace-nowrap">
+          <button data-edit="${r.id}" class="text-blue-700 hover:underline mr-2">edit</button>
+          <button data-del="${r.id}" class="text-red-600 hover:underline">hapus</button>
+        </td>
       </tr>`;
     });
     if (!data?.length) html += '<tr><td colspan="9" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
     html += '</tbody></table></div>';
     div.innerHTML = html;
 
-    div.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-      if (!confirm('Hapus item ini?')) return;
-      const { error } = await sb.from('items').delete().eq('id', b.dataset.del);
+    div.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => {
+      const id = Number(b.dataset.edit);
+      const { data: item, error } = await sb.from('items').select('*').eq('id', id).single();
       if (error) return alert(error.message);
-      load();
+      const updated = await showEditItemModal(item);
+      if (updated) load();
     });
 
     const totalPage = Math.max(1, Math.ceil(total / pageSize));
