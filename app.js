@@ -1266,14 +1266,18 @@ async function pageAnalisa() {
       body.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
       const { data, error } = await sb.from('v_opname_summary')
         .select('*').eq('period_id', pid)
-        .order('total_nilai', { ascending: false });
+        .order('total_nilai_jual', { ascending: false });
       if (error) { body.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
       const rows = (data || []).map(r => ({
-        ...r, total_qty: Number(r.total_qty||0), total_nilai: Number(r.total_nilai||0),
+        ...r,
+        total_qty: Number(r.total_qty || 0),
+        total_nilai_beli: Number(r.total_nilai_beli || 0),
+        total_nilai_jual: Number(r.total_nilai_jual || 0),
       }));
       const totalItem = rows.reduce((s,r) => s + Number(r.jml_item), 0);
       const totalQty = rows.reduce((s,r) => s + r.total_qty, 0);
-      const totalNilai = rows.reduce((s,r) => s + r.total_nilai, 0);
+      const totalNilaiBeli = rows.reduce((s,r) => s + r.total_nilai_beli, 0);
+      const totalNilaiJual = rows.reduce((s,r) => s + r.total_nilai_jual, 0);
       let html = `
         <div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
           ℹ️ Menu ini <b>murni dari data opname</b> yang Anda upload per unit.
@@ -1282,9 +1286,14 @@ async function pageAnalisa() {
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total Nilai Opname</div>
-            <div class="text-2xl font-bold text-green-700 mt-1">Rp ${fmtInt(totalNilai)}</div>
+            <div class="text-xs text-slate-500">Total Nilai Beli (HPP)</div>
+            <div class="text-2xl font-bold text-blue-700 mt-1">Rp ${fmtInt(totalNilaiBeli)}</div>
             <div class="text-xs text-slate-400 mt-1">${rows.length} unit dengan opname</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Nilai Jual</div>
+            <div class="text-2xl font-bold text-green-700 mt-1">Rp ${fmtInt(totalNilaiJual)}</div>
+            <div class="text-xs text-slate-400 mt-1">berdasarkan harga jual</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4">
             <div class="text-xs text-slate-500">Total Item Diopname</div>
@@ -1308,7 +1317,8 @@ async function pageAnalisa() {
             <th class="px-2 py-2 text-left">Kategori</th>
             <th class="px-2 py-2 text-right">Jml Item</th>
             <th class="px-2 py-2 text-right">Total Qty</th>
-            <th class="px-2 py-2 text-right">Nilai Opname (Rp)</th>
+            <th class="px-2 py-2 text-right">Nilai Beli (Rp)</th>
+            <th class="px-2 py-2 text-right">Nilai Jual (Rp)</th>
             <th class="px-2 py-2 text-right">% dari Total</th>
           </tr></thead><tbody>
       `;
@@ -1316,7 +1326,7 @@ async function pageAnalisa() {
         html += `<tr><td colspan="8" class="p-6 text-center text-slate-400">Belum ada data opname untuk periode ini.</td></tr>`;
       } else {
         rows.forEach(r => {
-          const pct = totalNilai > 0 ? (r.total_nilai / totalNilai * 100) : 0;
+          const pct = totalNilaiJual > 0 ? (r.total_nilai_jual / totalNilaiJual * 100) : 0;
           html += `<tr class="border-t hover:bg-slate-50">
             <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
             <td class="px-2 py-1">${esc(r.unit_nama)}</td>
@@ -1324,15 +1334,17 @@ async function pageAnalisa() {
             <td class="px-2 py-1">${esc(r.unit_kategori)}</td>
             <td class="px-2 py-1 text-right">${fmtInt(r.jml_item)}</td>
             <td class="px-2 py-1 text-right">${fmtInt(r.total_qty)}</td>
-            <td class="px-2 py-1 text-right font-semibold text-green-700">${fmtInt(r.total_nilai)}</td>
+            <td class="px-2 py-1 text-right text-blue-700">${fmtInt(r.total_nilai_beli)}</td>
+            <td class="px-2 py-1 text-right font-semibold text-green-700">${fmtInt(r.total_nilai_jual)}</td>
             <td class="px-2 py-1 text-right text-slate-500">${pct.toFixed(1)}%</td>
           </tr>`;
         });
-        html += `<tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+         html += `<tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
           <td colspan="4" class="px-2 py-2">TOTAL</td>
           <td class="px-2 py-2 text-right">${fmtInt(totalItem)}</td>
           <td class="px-2 py-2 text-right">${fmtInt(totalQty)}</td>
-          <td class="px-2 py-2 text-right text-green-700">${fmtInt(totalNilai)}</td>
+          <td class="px-2 py-2 text-right text-blue-700">${fmtInt(totalNilaiBeli)}</td>
+          <td class="px-2 py-2 text-right text-green-700">${fmtInt(totalNilaiJual)}</td>
           <td class="px-2 py-2 text-right">100.0%</td>
         </tr>`;
       }
@@ -1340,11 +1352,12 @@ async function pageAnalisa() {
       body.innerHTML = html;
       const btnExp = document.getElementById('opname-export');
       if (btnExp) btnExp.onclick = () => {
-        const obj = rows.map(r => ({
+       const obj = rows.map(r => ({
           'Kode Unit': r.unit_kode, 'Nama Unit': r.unit_nama,
           'Tipe': r.unit_tipe, 'Kategori': r.unit_kategori,
           'Jml Item': r.jml_item, 'Total Qty': r.total_qty,
-          'Nilai Opname (Rp)': r.total_nilai,
+          'Nilai Beli (Rp)': r.total_nilai_beli,
+          'Nilai Jual (Rp)': r.total_nilai_jual,
         }));
         const ws = XLSX.utils.json_to_sheet(obj);
         const wb = XLSX.utils.book_new();
