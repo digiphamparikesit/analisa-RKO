@@ -1023,20 +1023,6 @@ async function pageStok() {
             <option value="Program">Program</option>
           </select>
         </div>
-         <div>
-          <label class="text-xs text-slate-500">Flag Harga</label>
-          <select id="i-flag" class="w-full border rounded px-2 py-1 text-sm">
-            <option value="">Semua</option>
-            <option value="__any__">⚠️ Semua Flag</option>
-            <option value="jual_0">💰 Harga Jual 0</option>
-            <option value="beli_0">💰 Harga Beli 0</option>
-            <option value="jual_1">⚠️ Harga Jual Rp1</option>
-            <option value="margin_parah">🔴 Margin Parah</option>
-            <option value="margin_negatif">🟠 Margin Negatif</option>
-            <option value="margin_0">🟡 Margin 0%</option>
-            <option value="__normal__">✅ Normal</option>
-          </select>
-        </div>
         <div>
           <label class="text-xs text-slate-500">Cari (kode/nama)</label>
           <input id="f-q" class="w-full border rounded px-2 py-1 text-sm" placeholder="ketik...">
@@ -2212,7 +2198,7 @@ async function pageMasterItem() {
   const el = document.getElementById('page-content');
   el.innerHTML = `
     <div class="bg-white rounded-xl shadow p-4 mb-3">
-      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
         <div class="md:col-span-2">
           <label class="text-xs text-slate-500">Cari (kode/nama)</label>
           <input id="i-q" class="w-full border rounded px-2 py-1 text-sm" placeholder="ketik...">
@@ -2226,6 +2212,20 @@ async function pageMasterItem() {
             <option value="B3">B3</option>
             <option value="Nutrisi">Nutrisi Enteral</option>
             <option value="Program">Program</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Flag Harga</label>
+          <select id="i-flag" class="w-full border rounded px-2 py-1 text-sm">
+            <option value="">Semua</option>
+            <option value="__any__">⚠️ Semua Flag</option>
+            <option value="jual_0">💰 Harga Jual 0</option>
+            <option value="beli_0">💰 Harga Beli 0</option>
+            <option value="jual_1">⚠️ Harga Jual Rp1</option>
+            <option value="margin_parah">🔴 Margin Parah</option>
+            <option value="margin_negatif">🟠 Margin Negatif</option>
+            <option value="margin_0">🟡 Margin 0%</option>
+            <option value="__normal__">✅ Normal</option>
           </select>
         </div>
         <div class="flex items-end">
