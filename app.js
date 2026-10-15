@@ -2308,7 +2308,6 @@ async function pageMasterItem() {
     else if (flag === '__normal__') query = query.is('flag_harga', null);
     else if (flag)                  query = query.eq('flag_harga', flag);
     const { data, error, count } = await query;
-    const { data, error, count } = await query;
     if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
     total = count || 0;
 
