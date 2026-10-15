@@ -534,7 +534,6 @@ const TrxPage = (() => {
     });
     return m;
   }
-  }
   function clearCache() { _cache.items = null; _cache.units = null; }
 
   async function render(cfg) {
