@@ -98,6 +98,12 @@ async function showEditItemModal(item) {
               <span>Aktif</span>
             </label>
           </div>
+          ${item.flag_harga ? `
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+              <div class="font-semibold mb-1">⚠️ Item ini Ditandai</div>
+              <div><b>Flag:</b> ${esc(item.flag_harga)}</div>
+              <div><b>Catatan:</b> ${esc(item.flag_catatan || '-')}</div>
+            </div>` : ''}
           <div data-msg class="text-sm"></div>
         </div>
         <div class="px-6 py-3 border-t flex justify-end gap-2">
@@ -1015,6 +1021,20 @@ async function pageStok() {
             <option value="B3">B3</option>
             <option value="Nutrisi">Nutrisi Enteral</option>
             <option value="Program">Program</option>
+          </select>
+        </div>
+         <div>
+          <label class="text-xs text-slate-500">Flag Harga</label>
+          <select id="i-flag" class="w-full border rounded px-2 py-1 text-sm">
+            <option value="">Semua</option>
+            <option value="__any__">⚠️ Semua Flag</option>
+            <option value="jual_0">💰 Harga Jual 0</option>
+            <option value="beli_0">💰 Harga Beli 0</option>
+            <option value="jual_1">⚠️ Harga Jual Rp1</option>
+            <option value="margin_parah">🔴 Margin Parah</option>
+            <option value="margin_negatif">🟠 Margin Negatif</option>
+            <option value="margin_0">🟡 Margin 0%</option>
+            <option value="__normal__">✅ Normal</option>
           </select>
         </div>
         <div>
@@ -2169,12 +2189,30 @@ async function pageAnalisa() {
   await renderTab('rko');
 }
 
+// ===================================================
+// RENDER BADGE FLAG HARGA
+// ===================================================
+function renderFlagBadge(flag, catatan) {
+  if (!flag) return '';
+  const config = {
+    'jual_0':         { label: '💰 Jual 0',       cls: 'bg-red-100 text-red-700' },
+    'beli_0':         { label: '💰 Beli 0',       cls: 'bg-red-100 text-red-700' },
+    'jual_1':         { label: '⚠️ Jual Rp1',     cls: 'bg-red-100 text-red-700' },
+    'margin_parah':   { label: '🔴 Margin!',      cls: 'bg-red-100 text-red-700' },
+    'margin_negatif': { label: '🟠 Margin−',      cls: 'bg-orange-100 text-orange-800' },
+    'margin_0':       { label: '🟡 Margin 0%',    cls: 'bg-amber-100 text-amber-800' },
+  };
+  const c = config[flag];
+  if (!c) return `<span class="text-xs text-slate-400">${esc(flag)}</span>`;
+  return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${c.cls}" title="${esc(catatan || '')}">${c.label}</span>`;
+}
+
 // ---------- PAGE: MASTER ITEM ----------
 async function pageMasterItem() {
   const el = document.getElementById('page-content');
   el.innerHTML = `
     <div class="bg-white rounded-xl shadow p-4 mb-3">
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
         <div class="md:col-span-2">
           <label class="text-xs text-slate-500">Cari (kode/nama)</label>
           <input id="i-q" class="w-full border rounded px-2 py-1 text-sm" placeholder="ketik...">
@@ -2213,18 +2251,22 @@ async function pageMasterItem() {
     div.innerHTML = '<div class="p-6 text-slate-500 text-sm">Memuat...</div>';
     const q = document.getElementById('i-q').value.trim();
     const kat = document.getElementById('i-kat').value;
+    const flag = document.getElementById('i-flag').value;
     const from = (page-1) * pageSize;
     const to = from + pageSize - 1;
 
     let query = sb.from('items').select('*', { count:'exact' }).range(from, to).order('nama');
     if (q) query = query.or(`kode.ilike.%${q}%,nama.ilike.%${q}%`);
     if (kat) query = query.eq('grup', kat);
+    if (flag === '__any__')         query = query.not('flag_harga', 'is', null);
+    else if (flag === '__normal__') query = query.is('flag_harga', null);
+    else if (flag)                  query = query.eq('flag_harga', flag);
     const { data, error, count } = await query;
     if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
     total = count || 0;
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
-    ['Kode','Nama','Kategori','Satuan','Kemasan','Isi','Harga Beli','Harga Jual','Min Stok','Aktif','Aksi'].forEach(h =>
+    ['Kode','Nama','Kategori','Satuan','Kemasan','Isi','Harga Beli','Harga Jual','Min Stok','Aktif','Flag','Aksi'].forEach(h =>
       html += `<th class="px-2 py-2 text-left">${h}</th>`);
     html += '</tr></thead><tbody>';
     (data||[]).forEach(r => {
@@ -2239,13 +2281,14 @@ async function pageMasterItem() {
         <td class="px-2 py-1 text-right">${fmtNum(r.harga_jual)}</td>
         <td class="px-2 py-1 text-right">${fmtNum(r.min_stok,0)}</td>
         <td class="px-2 py-1 text-center">${r.aktif ? '✓' : '×'}</td>
+        <td class="px-2 py-1 text-center">${renderFlagBadge(r.flag_harga, r.flag_catatan)}</td>
         <td class="px-2 py-1 whitespace-nowrap">
           <button data-edit="${r.id}" class="text-blue-700 hover:underline mr-2">edit</button>
           <button data-del="${r.id}" class="text-red-600 hover:underline">hapus</button>
         </td>
       </tr>`;
     });
-    if (!data?.length) html += '<tr><td colspan="11" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
+   if (!data?.length) html += '<tr><td colspan="12" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
     html += '</tbody></table></div>';
     div.innerHTML = html;
 
@@ -2271,6 +2314,7 @@ async function pageMasterItem() {
   document.getElementById('i-search').onclick = () => { page = 1; load(); };
   document.getElementById('i-q').addEventListener('keydown', e => { if (e.key==='Enter'){ page=1; load(); }});
   document.getElementById('i-kat').onchange = () => { page = 1; load(); };
+  document.getElementById('i-flag').onchange = () => { page = 1; load(); };
 
   document.getElementById('i-add').onclick = async () => {
     const newItem = await showAddItemModal();
