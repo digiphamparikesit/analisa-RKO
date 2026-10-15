@@ -67,30 +67,29 @@ async function showEditItemModal(item) {
               <label class="text-xs text-slate-500">Satuan <span class="text-red-500">*</span></label>
               <input data-f="satuan" class="w-full border rounded px-2 py-1 text-sm" value="${esc(item.satuan || '')}">
             </div>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
+         <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs text-slate-500">Satuan Kemasan</label>
-              <input data-f="satuan_kemasan" class="w-full border rounded px-2 py-1 text-sm" placeholder="Box / Botol / Strip">
+              <input data-f="satuan_kemasan" class="w-full border rounded px-2 py-1 text-sm" value="${esc(item.satuan_kemasan || '')}" placeholder="Box / Botol / Strip">
             </div>
             <div>
               <label class="text-xs text-slate-500">Isi per Kemasan</label>
-              <input data-f="isi_kemasan" type="number" class="w-full border rounded px-2 py-1 text-sm" value="1" placeholder="1 box = ? satuan kecil">
+              <input data-f="isi_kemasan" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.isi_kemasan || 1)}" placeholder="1 box = ? satuan kecil">
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs text-slate-500">Harga Beli (HPP)</label>
-              <input data-f="harga_beli" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
+              <input data-f="harga_beli" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.harga_beli || 0)}">
             </div>
             <div>
               <label class="text-xs text-slate-500">Harga Jual</label>
-              <input data-f="harga_jual" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
+              <input data-f="harga_jual" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.harga_jual || 0)}">
             </div>
           </div>
           <div>
             <label class="text-xs text-slate-500">Min Stok</label>
-            <input data-f="min_stok" type="number" class="w-full border rounded px-2 py-1 text-sm" value="0">
+            <input data-f="min_stok" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${Number(item.min_stok || 0)}">
           </div>
           <div>
             <label class="flex items-center gap-2 text-sm">
