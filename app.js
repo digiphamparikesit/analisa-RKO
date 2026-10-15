@@ -1150,14 +1150,21 @@ async function pageStok() {
     const key = document.getElementById('f-q').value.trim();
     if (uid) q = q.eq('unit_id', uid);
     if (kat) q = q.eq('item_grup', kat);
-    if (key) {
-      // Escape karakter khusus untuk PostgREST
-      const safe = key.replace(/[(),]/g, '\\$&');
-      q = q.or(`item_kode.ilike.%${safe}%,item_nama.ilike.%${safe}%`);
-    }
+     // Search di-handle terpisah (bukan di query utama)
+    // karena PostgREST tidak support karakter khusus di .or()
     const { data, error } = await q.order('item_nama').limit(5000);
     if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
     currentData = data || [];
+
+    // Filter search di sisi client (setelah data di-load)
+    if (key) {
+      const lowerKey = key.toLowerCase();
+      currentData = currentData.filter(r =>
+        (r.item_kode || '').toLowerCase().includes(lowerKey) ||
+        (r.item_nama || '').toLowerCase().includes(lowerKey)
+      );
+    }
+
     page = 1;
     renderTable();
   }
@@ -2295,23 +2302,31 @@ async function pageMasterItem() {
     const to = from + pageSize - 1;
 
     let query = sb.from('items').select('*', { count:'exact' }).range(from, to).order('nama');
-    if (q) {
-      const safe = q.replace(/[(),]/g, '\\$&');
-      query = query.or(`kode.ilike.%${safe}%,nama.ilike.%${safe}%`);
-    }
+   // q di-handle setelah data di-load
     if (kat) query = query.eq('grup', kat);
     if (flag === '__any__')         query = query.not('flag_harga', 'is', null);
     else if (flag === '__normal__') query = query.is('flag_harga', null);
     else if (flag)                  query = query.eq('flag_harga', flag);
     const { data, error, count } = await query;
+    const { data, error, count } = await query;
     if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
     total = count || 0;
+
+    // Filter search di sisi client
+    let filteredData = data || [];
+    if (q) {
+      const lowerQ = q.toLowerCase();
+      filteredData = filteredData.filter(r =>
+        (r.kode || '').toLowerCase().includes(lowerQ) ||
+        (r.nama || '').toLowerCase().includes(lowerQ)
+      );
+    }
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
     ['Kode','Nama','Kategori','Satuan','Kemasan','Isi','Harga Beli','Harga Jual','Min Stok','Aktif','Flag','Aksi'].forEach(h =>
       html += `<th class="px-2 py-2 text-left">${h}</th>`);
     html += '</tr></thead><tbody>';
-    (data||[]).forEach(r => {
+    (filteredData||[]).forEach(r => {
       html += `<tr class="border-t hover:bg-slate-50">
         <td class="px-2 py-1 font-mono">${esc(r.kode)}</td>
         <td class="px-2 py-1">${esc(r.nama)}</td>
@@ -2330,7 +2345,7 @@ async function pageMasterItem() {
         </td>
       </tr>`;
     });
-   if (!data?.length) html += '<tr><td colspan="12" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
+   if (!filteredData?.length) html += '<tr><td colspan="12" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>';
     html += '</tbody></table></div>';
     div.innerHTML = html;
 
