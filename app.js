@@ -2431,7 +2431,11 @@ async function pageMasterItem() {
     const to = from + pageSize - 1;
 
     let query = sb.from('items').select('*', { count:'exact' }).range(from, to).order('nama');
-   // q di-handle setelah data di-load
+    if (q) {
+      // Search di server, bersihkan karakter khusus PostgREST
+      const safe = q.replace(/[%_,()]/g, '').trim();
+      if (safe) query = query.or(`kode.ilike.%${safe}%,nama.ilike.%${safe}%`);
+    }
     if (kat) query = query.eq('grup', kat);
     if (flag === '__any__')         query = query.not('flag_harga', 'is', null);
     else if (flag === '__normal__') query = query.is('flag_harga', null);
@@ -2440,15 +2444,8 @@ async function pageMasterItem() {
     if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
     total = count || 0;
 
-    // Filter search di sisi client
-    let filteredData = data || [];
-    if (q) {
-      const lowerQ = q.toLowerCase();
-      filteredData = filteredData.filter(r =>
-        (r.kode || '').toLowerCase().includes(lowerQ) ||
-        (r.nama || '').toLowerCase().includes(lowerQ)
-      );
-    }
+    // Tidak perlu filter client-side, sudah di server
+    const filteredData = data || [];
 
     let html = '<div class="table-scroll"><table class="w-full text-xs"><thead><tr>';
     ['Kode','Nama','Kategori','Satuan','Kemasan','Isi','Harga Beli','Harga Jual','Min Stok','Aktif','Flag','Aksi'].forEach(h =>
