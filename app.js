@@ -1042,7 +1042,7 @@ async function pageStok() {
   const el = document.getElementById('page-content');
   el.innerHTML = `
     <div class="bg-white rounded-xl shadow p-4 mb-3">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>
           <label class="text-xs text-slate-500">Unit</label>
           <select id="f-unit" class="w-full border rounded px-2 py-1 text-sm"></select>
@@ -1061,6 +1061,15 @@ async function pageStok() {
         <div>
           <label class="text-xs text-slate-500">Cari (kode/nama)</label>
           <input id="f-q" class="w-full border rounded px-2 py-1 text-sm" placeholder="ketik...">
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Status</label>
+          <select id="f-status" class="w-full border rounded px-2 py-1 text-sm">
+            <option value="">Semua Status</option>
+            <option value="perlu_dicek">⚠️ Perlu Dicek</option>
+            <option value="kritis">🔴 Kritis</option>
+            <option value="ok">✅ OK</option>
+          </select>
         </div>
         <div class="flex items-end gap-2">
           <button id="f-apply" class="btn btn-primary flex-1">Terapkan</button>
@@ -1148,6 +1157,7 @@ async function pageStok() {
     const uid = selUnit.value;
     const kat = document.getElementById('f-kat').value;
     const key = document.getElementById('f-q').value.trim();
+    const stat = document.getElementById('f-status').value;
     if (uid) q = q.eq('unit_id', uid);
     if (kat) q = q.eq('item_grup', kat);
      // Search di-handle terpisah (bukan di query utama)
@@ -1165,6 +1175,18 @@ async function pageStok() {
       );
     }
 
+    // Filter status
+    if (stat) {
+      currentData = currentData.filter(r => {
+        const pakaiNegatif = Number(r.total_pemakaian || 0) < 0;
+        const kritis = Number(r.stok_akhir) < Number(r.min_stok || 0);
+        if (stat === 'perlu_dicek') return pakaiNegatif;
+        if (stat === 'kritis')      return !pakaiNegatif && kritis;
+        if (stat === 'ok')          return !pakaiNegatif && !kritis;
+        return true;
+      });
+    }
+
     page = 1;
     renderTable();
   }
@@ -1178,6 +1200,7 @@ async function pageStok() {
     XLSX.writeFile(wb, `stok-${Period.label(window.activePeriodId)}.xlsx`);
   };
   document.getElementById('f-q').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+   document.getElementById('f-status').onchange = () => load();
 
   await load();
 }
