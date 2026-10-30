@@ -1233,6 +1233,7 @@ async function pageAnalisa() {
         <button data-tab="opname" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Nilai Opname</button>
         <button data-tab="status-opname" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Status Opname</button>
         <button data-tab="anomali-unit" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Anomali per Unit</button>
+        <button data-tab="opname-kategori" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">Opname per Kategori</button>
       </div>
       <div id="tab-body" class="p-4"></div>
     </div>
@@ -1363,6 +1364,146 @@ async function pageAnalisa() {
       }, 0);
     }
 
+          // --- Tab 12: OPNAME PER KATEGORI (breakdown Obat/BMHP/B3 per unit) ---
+    else if (name === 'opname-kategori') {
+      body.innerHTML = '<div class="text-slate-500 text-sm">Memuat rekap opname per kategori...</div>';
+
+      // Ambil data dari view baru
+      const { data, error } = await sb.from('v_opname_kategori')
+        .select('*')
+        .eq('period_id', pid);
+      if (error) { body.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
+
+      // Pivot per unit: { unit_id: { unit_kode, unit_nama, Obat, BMHP, B3, total } }
+      const agg = {};
+      (data || []).forEach(r => {
+        const key = r.unit_id;
+        if (!agg[key]) {
+          agg[key] = {
+            unit_id: r.unit_id,
+            unit_kode: r.unit_kode,
+            unit_nama: r.unit_nama,
+            Obat: 0,
+            BMHP: 0,
+            B3: 0,
+            Lainnya: 0,
+            total: 0,
+            jml_item_total: 0,
+          };
+        }
+        const nilai = Number(r.nilai_jual || 0);
+        agg[key][r.kategori_grup] = (agg[key][r.kategori_grup] || 0) + nilai;
+        agg[key].total += nilai;
+        agg[key].jml_item_total += Number(r.jml_item || 0);
+      });
+
+      const rows = Object.values(agg).sort((a,b) => b.total - a.total);
+
+      // Grand total
+      const grand = {
+        Obat: 0, BMHP: 0, B3: 0, Lainnya: 0, total: 0, jml_item_total: 0,
+      };
+      rows.forEach(r => {
+        grand.Obat += r.Obat;
+        grand.BMHP += r.BMHP;
+        grand.B3 += r.B3;
+        grand.Lainnya += r.Lainnya;
+        grand.total += r.total;
+        grand.jml_item_total += r.jml_item_total;
+      });
+
+      let html = `
+        <div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+          ℹ️ Rekap <b>nilai stok opname</b> per unit, dikelompokkan berdasarkan kategori:
+          <b>Obat</b> (OBAT + semua PROGRAM*), <b>BMHP</b> (BMHP + BHP), <b>B3</b>. Nilai berdasarkan harga jual.
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total Obat</div>
+            <div class="text-xl font-bold text-blue-700 mt-1">Rp ${fmtInt(grand.Obat)}</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total BMHP</div>
+            <div class="text-xl font-bold text-green-700 mt-1">Rp ${fmtInt(grand.BMHP)}</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4">
+            <div class="text-xs text-slate-500">Total B3</div>
+            <div class="text-xl font-bold text-amber-700 mt-1">Rp ${fmtInt(grand.B3)}</div>
+          </div>
+          <div class="bg-white border rounded-xl shadow p-4 bg-red-50 border-red-200">
+            <div class="text-xs text-red-700 font-semibold">Grand Total Opname</div>
+            <div class="text-xl font-bold text-red-700 mt-1">Rp ${fmtInt(grand.total)}</div>
+          </div>
+        </div>
+        <div class="mb-2 flex justify-end">
+          <button class="btn btn-success" id="opname-kategori-export">&#11015; Export Excel</button>
+        </div>
+        <div class="table-scroll">
+          <table class="w-full text-xs"><thead><tr>
+            <th class="px-2 py-2 text-left">Kode Unit</th>
+            <th class="px-2 py-2 text-left">Nama Unit</th>
+            <th class="px-2 py-2 text-right">Jml Item</th>
+            <th class="px-2 py-2 text-right">Obat (Rp)</th>
+            <th class="px-2 py-2 text-right">BMHP (Rp)</th>
+            <th class="px-2 py-2 text-right">B3 (Rp)</th>
+            <th class="px-2 py-2 text-right">Total Opname (Rp)</th>
+          </tr></thead><tbody>
+      `;
+
+      if (!rows.length) {
+        html += `<tr><td colspan="7" class="p-6 text-center text-slate-400">Belum ada data opname untuk periode ini.</td></tr>`;
+      } else {
+        rows.forEach(r => {
+          html += `<tr class="border-t hover:bg-slate-50">
+            <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
+            <td class="px-2 py-1">${esc(r.unit_nama)}</td>
+            <td class="px-2 py-1 text-right">${fmtInt(r.jml_item_total)}</td>
+            <td class="px-2 py-1 text-right text-blue-700">${fmtInt(r.Obat)}</td>
+            <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.BMHP)}</td>
+            <td class="px-2 py-1 text-right text-amber-700">${fmtInt(r.B3)}</td>
+            <td class="px-2 py-1 text-right font-bold text-slate-800">${fmtInt(r.total)}</td>
+          </tr>`;
+        });
+        html += `<tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+          <td colspan="2" class="px-2 py-2">GRAND TOTAL</td>
+          <td class="px-2 py-2 text-right">${fmtInt(grand.jml_item_total)}</td>
+          <td class="px-2 py-2 text-right text-blue-700">${fmtInt(grand.Obat)}</td>
+          <td class="px-2 py-2 text-right text-green-700">${fmtInt(grand.BMHP)}</td>
+          <td class="px-2 py-2 text-right text-amber-700">${fmtInt(grand.B3)}</td>
+          <td class="px-2 py-2 text-right text-slate-900">${fmtInt(grand.total)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+
+      // Export Excel
+      const btnExp = document.getElementById('opname-kategori-export');
+      if (btnExp) btnExp.onclick = () => {
+        const obj = rows.map(r => ({
+          'Kode Unit': r.unit_kode,
+          'Nama Unit': r.unit_nama,
+          'Jml Item': r.jml_item_total,
+          'Obat (Rp)': r.Obat,
+          'BMHP (Rp)': r.BMHP,
+          'B3 (Rp)': r.B3,
+          'Total Opname (Rp)': r.total,
+        }));
+        obj.push({
+          'Kode Unit': 'GRAND TOTAL',
+          'Nama Unit': '',
+          'Jml Item': grand.jml_item_total,
+          'Obat (Rp)': grand.Obat,
+          'BMHP (Rp)': grand.BMHP,
+          'B3 (Rp)': grand.B3,
+          'Total Opname (Rp)': grand.total,
+        });
+        const ws = XLSX.utils.json_to_sheet(obj);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Opname per Kategori');
+        XLSX.writeFile(wb, `opname-kategori-${Period.label(pid) || ''}.xlsx`);
+      };
+    }
+      
           // --- Tab 9: NILAI OPNAME PER UNIT (murni dari tabel opname) ---
     else if (name === 'opname') {
       body.innerHTML = '<div class="text-slate-500 text-sm">Memuat...</div>';
