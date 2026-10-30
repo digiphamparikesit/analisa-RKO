@@ -1368,13 +1368,12 @@ async function pageAnalisa() {
     else if (name === 'opname-kategori') {
       body.innerHTML = '<div class="text-slate-500 text-sm">Memuat rekap opname per kategori...</div>';
 
-      // Ambil data dari view baru
       const { data, error } = await sb.from('v_opname_kategori')
         .select('*')
         .eq('period_id', pid);
       if (error) { body.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
 
-      // Pivot per unit: { unit_id: { unit_kode, unit_nama, Obat, BMHP, B3, total } }
+      // Pivot per unit dengan nilai jual DAN nilai beli
       const agg = {};
       (data || []).forEach(r => {
         const key = r.unit_id;
@@ -1383,119 +1382,167 @@ async function pageAnalisa() {
             unit_id: r.unit_id,
             unit_kode: r.unit_kode,
             unit_nama: r.unit_nama,
-            Obat: 0,
-            BMHP: 0,
-            B3: 0,
-            Lainnya: 0,
-            total: 0,
+            // Nilai Jual
+            Obat_jual: 0, BMHP_jual: 0, B3_jual: 0,
+            total_jual: 0,
+            // Nilai Beli
+            Obat_beli: 0, BMHP_beli: 0, B3_beli: 0,
+            total_beli: 0,
             jml_item_total: 0,
           };
         }
-        const nilai = Number(r.nilai_jual || 0);
-        agg[key][r.kategori_grup] = (agg[key][r.kategori_grup] || 0) + nilai;
-        agg[key].total += nilai;
+        const nilaiJual = Number(r.nilai_jual || 0);
+        const nilaiBeli = Number(r.nilai_beli || 0);
+        const grup = r.kategori_grup;
+
+        agg[key][grup + '_jual'] = (agg[key][grup + '_jual'] || 0) + nilaiJual;
+        agg[key][grup + '_beli'] = (agg[key][grup + '_beli'] || 0) + nilaiBeli;
+        agg[key].total_jual += nilaiJual;
+        agg[key].total_beli += nilaiBeli;
         agg[key].jml_item_total += Number(r.jml_item || 0);
       });
 
-      const rows = Object.values(agg).sort((a,b) => b.total - a.total);
+      const rows = Object.values(agg).sort((a,b) => b.total_jual - a.total_jual);
 
       // Grand total
       const grand = {
-        Obat: 0, BMHP: 0, B3: 0, Lainnya: 0, total: 0, jml_item_total: 0,
+        Obat_jual: 0, BMHP_jual: 0, B3_jual: 0, total_jual: 0,
+        Obat_beli: 0, BMHP_beli: 0, B3_beli: 0, total_beli: 0,
+        jml_item_total: 0,
       };
       rows.forEach(r => {
-        grand.Obat += r.Obat;
-        grand.BMHP += r.BMHP;
-        grand.B3 += r.B3;
-        grand.Lainnya += r.Lainnya;
-        grand.total += r.total;
+        grand.Obat_jual += r.Obat_jual;
+        grand.BMHP_jual += r.BMHP_jual;
+        grand.B3_jual += r.B3_jual;
+        grand.total_jual += r.total_jual;
+        grand.Obat_beli += r.Obat_beli;
+        grand.BMHP_beli += r.BMHP_beli;
+        grand.B3_beli += r.B3_beli;
+        grand.total_beli += r.total_beli;
         grand.jml_item_total += r.jml_item_total;
       });
 
       let html = `
         <div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-          ℹ️ Rekap <b>nilai stok opname</b> per unit, dikelompokkan berdasarkan kategori:
-          <b>Obat</b> (OBAT + semua PROGRAM*), <b>BMHP</b> (BMHP + BHP), <b>B3</b>. Nilai berdasarkan harga jual.
+          ℹ️ Rekap <b>nilai stok opname</b> per unit berdasarkan kategori:
+          <b>Obat</b> (OBAT + semua PROGRAM*), <b>BMHP</b> (BMHP + BHP), <b>B3</b>.
+          Ditampilkan dalam <b>2 kolom nilai</b>:
+          <span class="font-semibold text-green-700">Harga Jual</span> dan
+          <span class="font-semibold text-blue-700">Harga Beli (HPP)</span>.
         </div>
+
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total Obat</div>
-            <div class="text-xl font-bold text-blue-700 mt-1">Rp ${fmtInt(grand.Obat)}</div>
+            <div class="text-xs text-slate-500">Total Obat (Jual)</div>
+            <div class="text-xl font-bold text-blue-700 mt-1">Rp ${fmtInt(grand.Obat_jual)}</div>
+            <div class="text-xs text-slate-400 mt-1">HPP: Rp ${fmtInt(grand.Obat_beli)}</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total BMHP</div>
-            <div class="text-xl font-bold text-green-700 mt-1">Rp ${fmtInt(grand.BMHP)}</div>
+            <div class="text-xs text-slate-500">Total BMHP (Jual)</div>
+            <div class="text-xl font-bold text-green-700 mt-1">Rp ${fmtInt(grand.BMHP_jual)}</div>
+            <div class="text-xs text-slate-400 mt-1">HPP: Rp ${fmtInt(grand.BMHP_beli)}</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total B3</div>
-            <div class="text-xl font-bold text-amber-700 mt-1">Rp ${fmtInt(grand.B3)}</div>
+            <div class="text-xs text-slate-500">Total B3 (Jual)</div>
+            <div class="text-xl font-bold text-amber-700 mt-1">Rp ${fmtInt(grand.B3_jual)}</div>
+            <div class="text-xs text-slate-400 mt-1">HPP: Rp ${fmtInt(grand.B3_beli)}</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4 bg-red-50 border-red-200">
-            <div class="text-xs text-red-700 font-semibold">Grand Total Opname</div>
-            <div class="text-xl font-bold text-red-700 mt-1">Rp ${fmtInt(grand.total)}</div>
+            <div class="text-xs text-red-700 font-semibold">Grand Total</div>
+            <div class="text-xl font-bold text-red-700 mt-1">Rp ${fmtInt(grand.total_jual)}</div>
+            <div class="text-xs text-slate-500 mt-1">HPP: Rp ${fmtInt(grand.total_beli)}</div>
           </div>
         </div>
+
         <div class="mb-2 flex justify-end">
           <button class="btn btn-success" id="opname-kategori-export">&#11015; Export Excel</button>
         </div>
+
         <div class="table-scroll">
-          <table class="w-full text-xs"><thead><tr>
-            <th class="px-2 py-2 text-left">Kode Unit</th>
-            <th class="px-2 py-2 text-left">Nama Unit</th>
-            <th class="px-2 py-2 text-right">Jml Item</th>
-            <th class="px-2 py-2 text-right">Obat (Rp)</th>
-            <th class="px-2 py-2 text-right">BMHP (Rp)</th>
-            <th class="px-2 py-2 text-right">B3 (Rp)</th>
-            <th class="px-2 py-2 text-right">Total Opname (Rp)</th>
-          </tr></thead><tbody>
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="bg-slate-100">
+                <th rowspan="2" class="px-2 py-2 text-left">Kode Unit</th>
+                <th rowspan="2" class="px-2 py-2 text-left">Nama Unit</th>
+                <th rowspan="2" class="px-2 py-2 text-right">Jml Item</th>
+                <th colspan="3" class="px-2 py-2 text-center border-l">Nilai Jual (Rp)</th>
+                <th colspan="3" class="px-2 py-2 text-center border-l">Nilai HPP (Rp)</th>
+                <th rowspan="2" class="px-2 py-2 text-right border-l">Total Jual</th>
+                <th rowspan="2" class="px-2 py-2 text-right">Total HPP</th>
+              </tr>
+              <tr class="bg-slate-50 text-xs">
+                <th class="px-2 py-1 text-right border-l">Obat</th>
+                <th class="px-2 py-1 text-right">BMHP</th>
+                <th class="px-2 py-1 text-right">B3</th>
+                <th class="px-2 py-1 text-right border-l">Obat</th>
+                <th class="px-2 py-1 text-right">BMHP</th>
+                <th class="px-2 py-1 text-right">B3</th>
+              </tr>
+            </thead>
+            <tbody>
       `;
 
       if (!rows.length) {
-        html += `<tr><td colspan="7" class="p-6 text-center text-slate-400">Belum ada data opname untuk periode ini.</td></tr>`;
+        html += `<tr><td colspan="11" class="p-6 text-center text-slate-400">Belum ada data opname untuk periode ini.</td></tr>`;
       } else {
         rows.forEach(r => {
           html += `<tr class="border-t hover:bg-slate-50">
             <td class="px-2 py-1 font-mono">${esc(r.unit_kode)}</td>
             <td class="px-2 py-1">${esc(r.unit_nama)}</td>
             <td class="px-2 py-1 text-right">${fmtInt(r.jml_item_total)}</td>
-            <td class="px-2 py-1 text-right text-blue-700">${fmtInt(r.Obat)}</td>
-            <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.BMHP)}</td>
-            <td class="px-2 py-1 text-right text-amber-700">${fmtInt(r.B3)}</td>
-            <td class="px-2 py-1 text-right font-bold text-slate-800">${fmtInt(r.total)}</td>
+            <td class="px-2 py-1 text-right text-blue-700 border-l">${fmtInt(r.Obat_jual)}</td>
+            <td class="px-2 py-1 text-right text-green-700">${fmtInt(r.BMHP_jual)}</td>
+            <td class="px-2 py-1 text-right text-amber-700">${fmtInt(r.B3_jual)}</td>
+            <td class="px-2 py-1 text-right text-blue-600 border-l">${fmtInt(r.Obat_beli)}</td>
+            <td class="px-2 py-1 text-right text-green-600">${fmtInt(r.BMHP_beli)}</td>
+            <td class="px-2 py-1 text-right text-amber-600">${fmtInt(r.B3_beli)}</td>
+            <td class="px-2 py-1 text-right font-semibold text-slate-800 border-l">${fmtInt(r.total_jual)}</td>
+            <td class="px-2 py-1 text-right font-semibold text-slate-800">${fmtInt(r.total_beli)}</td>
           </tr>`;
         });
-        html += `<tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+        html += `<tr class="border-t-2 border-slate-300 bg-slate-100 font-bold">
           <td colspan="2" class="px-2 py-2">GRAND TOTAL</td>
           <td class="px-2 py-2 text-right">${fmtInt(grand.jml_item_total)}</td>
-          <td class="px-2 py-2 text-right text-blue-700">${fmtInt(grand.Obat)}</td>
-          <td class="px-2 py-2 text-right text-green-700">${fmtInt(grand.BMHP)}</td>
-          <td class="px-2 py-2 text-right text-amber-700">${fmtInt(grand.B3)}</td>
-          <td class="px-2 py-2 text-right text-slate-900">${fmtInt(grand.total)}</td>
+          <td class="px-2 py-2 text-right text-blue-700 border-l">${fmtInt(grand.Obat_jual)}</td>
+          <td class="px-2 py-2 text-right text-green-700">${fmtInt(grand.BMHP_jual)}</td>
+          <td class="px-2 py-2 text-right text-amber-700">${fmtInt(grand.B3_jual)}</td>
+          <td class="px-2 py-2 text-right text-blue-600 border-l">${fmtInt(grand.Obat_beli)}</td>
+          <td class="px-2 py-2 text-right text-green-600">${fmtInt(grand.BMHP_beli)}</td>
+          <td class="px-2 py-2 text-right text-amber-600">${fmtInt(grand.B3_beli)}</td>
+          <td class="px-2 py-2 text-right text-slate-900 border-l">${fmtInt(grand.total_jual)}</td>
+          <td class="px-2 py-2 text-right text-slate-900">${fmtInt(grand.total_beli)}</td>
         </tr>`;
       }
       html += '</tbody></table></div>';
       body.innerHTML = html;
 
-      // Export Excel
       const btnExp = document.getElementById('opname-kategori-export');
       if (btnExp) btnExp.onclick = () => {
         const obj = rows.map(r => ({
           'Kode Unit': r.unit_kode,
           'Nama Unit': r.unit_nama,
           'Jml Item': r.jml_item_total,
-          'Obat (Rp)': r.Obat,
-          'BMHP (Rp)': r.BMHP,
-          'B3 (Rp)': r.B3,
-          'Total Opname (Rp)': r.total,
+          'Obat Jual (Rp)': r.Obat_jual,
+          'BMHP Jual (Rp)': r.BMHP_jual,
+          'B3 Jual (Rp)': r.B3_jual,
+          'Total Jual (Rp)': r.total_jual,
+          'Obat HPP (Rp)': r.Obat_beli,
+          'BMHP HPP (Rp)': r.BMHP_beli,
+          'B3 HPP (Rp)': r.B3_beli,
+          'Total HPP (Rp)': r.total_beli,
         }));
         obj.push({
           'Kode Unit': 'GRAND TOTAL',
           'Nama Unit': '',
           'Jml Item': grand.jml_item_total,
-          'Obat (Rp)': grand.Obat,
-          'BMHP (Rp)': grand.BMHP,
-          'B3 (Rp)': grand.B3,
-          'Total Opname (Rp)': grand.total,
+          'Obat Jual (Rp)': grand.Obat_jual,
+          'BMHP Jual (Rp)': grand.BMHP_jual,
+          'B3 Jual (Rp)': grand.B3_jual,
+          'Total Jual (Rp)': grand.total_jual,
+          'Obat HPP (Rp)': grand.Obat_beli,
+          'BMHP HPP (Rp)': grand.BMHP_beli,
+          'B3 HPP (Rp)': grand.B3_beli,
+          'Total HPP (Rp)': grand.total_beli,
         });
         const ws = XLSX.utils.json_to_sheet(obj);
         const wb = XLSX.utils.book_new();
