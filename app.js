@@ -460,9 +460,12 @@ const PasteModal = (() => {
     if (!lines.length) return [];
     const first = lines[0];
     let delim = '\t';
+    
+    // Deteksi delimiter (Tab, titik koma, atau koma)
     if (!first.includes('\t')) {
       delim = (first.split(';').length > first.split(',').length) ? ';' : ',';
     }
+    
     return lines.map(line => {
       const cells = []; let cur = '', inQ = false;
       for (let i = 0; i < line.length; i++) {
@@ -470,8 +473,19 @@ const PasteModal = (() => {
         if (c === '"') {
           if (inQ && line[i+1] === '"') { cur += '"'; i++; }
           else inQ = !inQ;
-        } else if (c === delim && !inQ) { cells.push(cur); cur = ''; }
-        else cur += c;
+        } else if (c === delim && !inQ) {
+          // Cerdas: Jika delim adalah koma, tapi karakter sebelum & sesudahnya adalah ANGKA,
+          // maka itu adalah desimal, bukan pemisah kolom!
+          const prevChar = line[i-1];
+          const nextChar = line[i+1];
+          if (delim === ',' && /[0-9]/.test(prevChar) && /[0-9]/.test(nextChar)) {
+            cur += c; // Biarkan koma sebagai bagian dari angka desimal
+          } else {
+            cells.push(cur); cur = '';
+          }
+        } else {
+          cur += c;
+        }
       }
       cells.push(cur);
       return cells.map(s => s.trim());
