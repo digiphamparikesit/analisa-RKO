@@ -1989,7 +1989,7 @@ async function pageAnalisa() {
           };
         }
         const qty = Math.abs(Number(r.total_pemakaian || 0));
-        const nilai = qty * Number(r.harga_jual || 0);
+        const nilai = qty * Number(r.harga_jual_efektif || 0);
         agg[key].jml_item += 1;
         agg[key].total_qty_selisih += qty;
         agg[key].total_nilai += nilai;
@@ -2097,7 +2097,7 @@ async function pageAnalisa() {
       const { data } = await q;
       const allRows = (data || []).map(r => {
         const selisih = Math.abs(Number(r.total_pemakaian || 0));
-        const nilai   = selisih * Number(r.harga_jual || 0);
+        const nilai   = selisih * Number(r.harga_jual_efektif || 0);
         return { ...r, selisih, nilai_selisih: nilai };
       }).sort((a,b) => b.nilai_selisih - a.nilai_selisih);
 
@@ -2126,7 +2126,7 @@ async function pageAnalisa() {
         ['total_penerimaan','Penerimaan'], ['total_mutasi_masuk','Mutasi Masuk'],
         ['opname_qty','Stok Fisik'], ['total_pemakaian','Selisih'],
         ['selisih','Tidak Tercatat'], ['nilai_selisih','Nilai Tidak Tercatat (Rp)'],
-        ['harga_jual','Harga Satuan'],
+        ['harga_jual_efektif','Harga Satuan'],
       ];
 
       let html = summary;
