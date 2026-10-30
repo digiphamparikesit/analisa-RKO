@@ -1435,24 +1435,24 @@ async function pageAnalisa() {
 
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total Obat (Jual)</div>
-            <div class="text-xl font-bold text-blue-700 mt-1">Rp ${fmtInt(grand.Obat_jual)}</div>
-            <div class="text-xs text-slate-400 mt-1">HPP: Rp ${fmtInt(grand.Obat_beli)}</div>
+            <div class="text-xs text-slate-500">Total Obat (HPP)</div>
+            <div class="text-xl font-bold text-blue-700 mt-1">Rp ${fmtInt(grand.Obat_beli)}</div>
+            <div class="text-xs text-slate-400 mt-1">Jual: Rp ${fmtInt(grand.Obat_jual)}</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total BMHP (Jual)</div>
-            <div class="text-xl font-bold text-green-700 mt-1">Rp ${fmtInt(grand.BMHP_jual)}</div>
-            <div class="text-xs text-slate-400 mt-1">HPP: Rp ${fmtInt(grand.BMHP_beli)}</div>
+            <div class="text-xs text-slate-500">Total BMHP (HPP)</div>
+            <div class="text-xl font-bold text-green-700 mt-1">Rp ${fmtInt(grand.BMHP_beli)}</div>
+            <div class="text-xs text-slate-400 mt-1">Jual: Rp ${fmtInt(grand.BMHP_jual)}</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4">
-            <div class="text-xs text-slate-500">Total B3 (Jual)</div>
-            <div class="text-xl font-bold text-amber-700 mt-1">Rp ${fmtInt(grand.B3_jual)}</div>
-            <div class="text-xs text-slate-400 mt-1">HPP: Rp ${fmtInt(grand.B3_beli)}</div>
+            <div class="text-xs text-slate-500">Total B3 (HPP)</div>
+            <div class="text-xl font-bold text-amber-700 mt-1">Rp ${fmtInt(grand.B3_beli)}</div>
+            <div class="text-xs text-slate-400 mt-1">Jual: Rp ${fmtInt(grand.B3_jual)}</div>
           </div>
           <div class="bg-white border rounded-xl shadow p-4 bg-red-50 border-red-200">
-            <div class="text-xs text-red-700 font-semibold">Grand Total</div>
-            <div class="text-xl font-bold text-red-700 mt-1">Rp ${fmtInt(grand.total_jual)}</div>
-            <div class="text-xs text-slate-500 mt-1">HPP: Rp ${fmtInt(grand.total_beli)}</div>
+            <div class="text-xs text-red-700 font-semibold">Grand Total (HPP)</div>
+            <div class="text-xl font-bold text-red-700 mt-1">Rp ${fmtInt(grand.total_beli)}</div>
+            <div class="text-xs text-slate-500 mt-1">Jual: Rp ${fmtInt(grand.total_jual)}</div>
           </div>
         </div>
 
