@@ -1968,7 +1968,7 @@ async function pageAnalisa() {
 
       // Ambil semua data v_stok yang pemakaian negatif
       const { data, error } = await sb.from('v_stok')
-        .select('unit_id,unit_kode,unit_nama,unit_tipe,item_id,item_nama,item_kode,satuan,harga_jual,total_pemakaian,opname_qty,stok_awal,total_penerimaan,total_mutasi_masuk')
+        .select('unit_id,unit_kode,unit_nama,unit_tipe,item_id,item_nama,item_kode,satuan,harga_jual_efektif,total_pemakaian,opname_qty,stok_awal,total_penerimaan,total_mutasi_masuk')
         .eq('period_id', pid)
         .lt('total_pemakaian', 0);
       if (error) { body.innerHTML = `<div class="text-red-600">${esc(error.message)}</div>`; return; }
