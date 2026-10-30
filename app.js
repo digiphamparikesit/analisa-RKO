@@ -815,6 +815,8 @@ const TrxPage = (() => {
         return out;
       },
       onCommit: async (rows) => {
+        // Kalau cfg punya onCommit custom (mis. opname dengan harga jual), pakai itu
+      if (cfg.onCommit) return await cfg.onCommit(rows);
         const TABLE_FIELDS = {
           rko:         ['period_id','item_id','qty_rko','harga_rko','satuan_input','qty_rko_kecil','ket'],
           penerimaan:  ['period_id','item_id','tanggal','no_faktur','supplier','qty','harga','jenis','ket'],
@@ -975,12 +977,12 @@ async function pageDashboard() {
   document.getElementById('card-items').textContent = itemCount ?? 0;
 
   const { data: stokData } = await sb.from('v_stok')
-    .select('item_id,item_kode,item_nama,satuan,harga_jual,min_stok,stok_akhir,unit_tipe')
+    .select('item_id,item_kode,item_nama,satuan,harga_jual_efektif,min_stok,stok_akhir,unit_tipe')
     .eq('period_id', pid);
   const rows = stokData || [];
   let nilai = 0; const kritisSet = new Set();
   rows.forEach(r => {
-    nilai += (r.stok_akhir || 0) * (r.harga_jual || 0);
+    nilai += (r.stok_akhir || 0) * (r.harga_jual_efektif || 0);
     if (r.unit_tipe === 'gudang_farmasi' && r.stok_akhir < (r.min_stok || 0)) kritisSet.add(r.item_id);
   });
   document.getElementById('card-nilai').textContent = 'Rp ' + fmtInt(nilai);
@@ -1302,10 +1304,10 @@ async function pageAnalisa() {
       if (unitId) q = q.eq('unit_id', unitId);
       const { data } = await q;
       body.innerHTML = tableHTML(data || [], [
-        ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
-        ['satuan','Satuan'], ['stok_akhir','Stok Akhir'],
-        ['harga_jual','Harga'], ['total_pemakaian','Pemakaian'],
-      ], 'dead-stock');
+      ['unit_kode','Unit'], ['item_kode','Kode'], ['item_nama','Nama Item'],
+      ['satuan','Satuan'], ['stok_akhir','Stok Akhir'],
+      ['harga_jual_efektif','Harga'], ['total_pemakaian','Pemakaian'],
+    ], 'dead-stock');
     }
     else if (name === 'nilai') {
       let q = sb.from('v_stok').select('*').eq('period_id', pid);
@@ -1313,7 +1315,7 @@ async function pageAnalisa() {
       const { data } = await q;
       const agg = {};
       (data || []).forEach(r => {
-        const v = Number(r.stok_akhir || 0) * Number(r.harga_jual || 0);
+        const v = Number(r.stok_akhir || 0) * Number(r.harga_jual_efektif || 0);
         const key = r.item_kode + '|' + r.item_nama + '|' + r.satuan;
         if (!agg[key]) agg[key] = { item_kode:r.item_kode, item_nama:r.item_nama, satuan:r.satuan, qty:0, nilai:0 };
         agg[key].qty += Number(r.stok_akhir || 0);
@@ -1341,7 +1343,7 @@ async function pageAnalisa() {
         if (qty !== 0) {
           agg[key].jml_item += 1;
           agg[key].total_qty += qty;
-          agg[key].nilai += qty * Number(r.harga_jual || 0);
+          agg[key].nilai += qty * Number(r.harga_jual_efektif||0);
           if (r.unit_tipe === 'gudang_farmasi' && qty < Number(r.min_stok || 0)) {
             agg[key].jml_kritis += 1;
           }
@@ -2439,7 +2441,7 @@ async function pageAnalisa() {
           pakai: r.total_pemakaian,
           stok_fisik: r.opname_qty,
           stok_akhir: r.stok_akhir,
-          nilai: Number(r.stok_akhir || 0) * Number(r.harga_jual || 0),
+          nilai: Number(r.stok_akhir || 0) * Number(r.harga_jual_efektif || 0),
         }));
 
         const unitName = allUnits.find(u => u.id === Number(unitId2))?.nama || '';
@@ -2936,6 +2938,424 @@ async function pageMasterPeriode() {
   await load();
 }
 
+// ---------- PAGE: HARGA PERIODE ----------
+async function pageHargaPeriode() {
+  const el = document.getElementById('page-content');
+  const pid = window.activePeriodId;
+  if (!pid) {
+    el.innerHTML = '<div class="p-4 bg-amber-50 text-amber-700 rounded">Pilih periode dulu.</div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="bg-white rounded-xl shadow p-4 mb-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div class="text-sm text-slate-600">
+            Periode: <b>${Period.label(pid)}</b>
+            <span id="hp-status" class="ml-2 text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">open</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            Harga jual satuan terkecil per item untuk periode ini.
+            Kalau kosong → fallback ke harga jual master.
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button id="hp-paste" class="btn btn-indigo">📋 Paste Excel</button>
+          <button id="hp-copy-prev" class="btn btn-gray">📄 Copy dari Periode Sebelumnya</button>
+          <button id="hp-reset-master" class="btn btn-gray">↺ Reset ke Master</button>
+          <button id="hp-export" class="btn btn-success">⬇ Export</button>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow">
+      <div id="hp-table" class="table-scroll"></div>
+    </div>
+  `;
+
+  let page = 1, pageSize = 30, total = 0, currentData = [];
+
+  async function load() {
+    const div = document.getElementById('hp-table');
+    div.innerHTML = '<div class="p-6 text-slate-500 text-sm">Memuat...</div>';
+
+    // Cek status periode
+    const { data: period } = await sb.from('periods').select('status').eq('id', pid).single();
+    const isClosed = period?.status === 'closed';
+    const statusEl = document.getElementById('hp-status');
+    if (statusEl) {
+      statusEl.textContent = isClosed ? 'closed' : 'open';
+      statusEl.className = `ml-2 text-xs px-2 py-0.5 rounded ${isClosed ? 'bg-slate-200 text-slate-600' : 'bg-green-100 text-green-700'}`;
+    }
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error, count } = await sb.from('items')
+      .select('id,kode,nama,satuan,kategori,harga_jual,harga_jual_locked', { count: 'exact' })
+      .eq('aktif', true)
+      .order('nama')
+      .range(from, to);
+    if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
+    total = count || 0;
+
+    // Ambil harga periode untuk item di halaman ini
+    const itemIds = (data || []).map(r => r.id);
+    let hargaMap = {};
+    if (itemIds.length) {
+      const { data: hp } = await sb.from('item_harga_periode')
+        .select('item_id,harga_jual,is_locked,sumber')
+        .eq('period_id', pid)
+        .in('item_id', itemIds);
+      (hp || []).forEach(h => { hargaMap[h.item_id] = h; });
+    }
+
+    currentData = (data || []).map(r => ({
+      ...r,
+      harga_periode: hargaMap[r.id]?.harga_jual,
+      is_locked: hargaMap[r.id]?.is_locked || false,
+      sumber: hargaMap[r.id]?.sumber || null,
+    }));
+
+    let html = '<table class="w-full text-xs"><thead><tr>';
+    ['Kode', 'Nama', 'Satuan', 'Kategori', 'Harga Jual Master', 'Harga Jual Periode', 'Sumber', 'Status', 'Aksi']
+      .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
+    html += '</tr></thead><tbody>';
+    currentData.forEach(r => {
+      const beda = r.harga_periode != null && Number(r.harga_periode) !== Number(r.harga_jual);
+      const badgeSumber = r.sumber
+        ? `<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">${esc(r.sumber)}</span>`
+        : '<span class="text-slate-400">—</span>';
+      const badgeLock = r.is_locked
+        ? '<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px]">🔒 locked</span>'
+        : '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">open</span>';
+      html += `<tr class="border-t hover:bg-slate-50">
+        <td class="px-2 py-1 font-mono">${esc(r.kode)}</td>
+        <td class="px-2 py-1">${esc(r.nama)}</td>
+        <td class="px-2 py-1">${esc(r.satuan)}</td>
+        <td class="px-2 py-1">${esc(r.kategori)}</td>
+        <td class="px-2 py-1 text-right">${fmtNum(r.harga_jual)}</td>
+        <td class="px-2 py-1 text-right font-semibold ${beda ? 'text-amber-700' : ''}">${r.harga_periode != null ? fmtNum(r.harga_periode) : '<span class="text-slate-400">— fallback —</span>'}</td>
+        <td class="px-2 py-1 text-center">${badgeSumber}</td>
+        <td class="px-2 py-1 text-center">${badgeLock}</td>
+        <td class="px-2 py-1 whitespace-nowrap">
+          ${r.is_locked || isClosed
+            ? '<span class="text-slate-400 text-xs">terkunci</span>'
+            : `<button data-edit="${r.id}" class="text-blue-700 hover:underline">edit</button>
+               ${r.harga_periode != null ? `<button data-reset="${r.id}" class="text-red-600 hover:underline ml-2">reset</button>` : ''}`}
+        </td>
+      </tr>`;
+    });
+    if (!currentData.length) html += '<tr><td colspan="9" class="p-6 text-center text-slate-400">Tidak ada item aktif.</td></tr>';
+    html += '</tbody></table>';
+
+    const totalPage = Math.max(1, Math.ceil(total / pageSize));
+    html += `<div class="p-3 flex items-center justify-between border-t text-sm bg-white">
+      <span>Total: <b>${total}</b> item · Halaman ${page}/${totalPage}</span>
+      <div class="flex gap-2">
+        <button id="hp-prev" class="btn btn-gray" ${page===1?'disabled':''}>&larr; Prev</button>
+        <button id="hp-next" class="btn btn-gray" ${page>=totalPage?'disabled':''}>Next &rarr;</button>
+      </div>
+    </div>`;
+    div.innerHTML = html;
+
+    document.getElementById('hp-prev').onclick = () => { if (page>1) { page--; load(); } };
+    document.getElementById('hp-next').onclick = () => { if (page<totalPage) { page++; load(); } };
+
+    div.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => {
+      const id = Number(b.dataset.edit);
+      const item = currentData.find(x => x.id === id);
+      const newVal = prompt(`Harga jual periode untuk:\n${item.kode} — ${item.nama}\n\nHarga jual master: ${fmtNum(item.harga_jual)}\nHarga periode sekarang: ${item.harga_periode != null ? fmtNum(item.harga_periode) : '(fallback master)'}\n\nMasukkan harga jual periode:`, item.harga_periode ?? item.harga_jual);
+      if (newVal == null) return;
+      const harga = Number(newVal);
+      if (isNaN(harga) || harga < 0) return alert('Harga tidak valid.');
+      const { error } = await sb.from('item_harga_periode').upsert([{
+        period_id: pid, item_id: id, harga_jual: harga, sumber: 'manual',
+      }], { onConflict: 'period_id,item_id' });
+      if (error) return alert(error.message);
+      toast('Harga periode disimpan', 'success');
+      load();
+    });
+
+    div.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => {
+      if (!confirm('Hapus harga periode untuk item ini? Akan fallback ke master.')) return;
+      const { error } = await sb.from('item_harga_periode')
+        .delete().eq('period_id', pid).eq('item_id', Number(b.dataset.reset));
+      if (error) return alert(error.message);
+      load();
+    });
+  }
+
+  document.getElementById('hp-paste').onclick = async () => {
+    const n = await PasteModal.open({
+      title: `Paste Harga Jual Periode — ${Period.label(pid)}`,
+      hint: 'Kolom: kode, harga_jual. Baris pertama (header) otomatis di-skip.',
+      columns: [
+        { key: 'kode', label: 'Kode Item', required: true },
+        { key: 'harga_jual', label: 'Harga Jual', required: true },
+      ],
+      validate: async (rows, { parseNumber }) => {
+        const items = await TrxPage.loadItems();
+        const iMap = mapByKodeFromItems(items);
+        const out = { rows: [], errors: [] };
+        rows.forEach((cells, i) => {
+          const kode = String(cells[0] || '').trim().toUpperCase();
+          const harga = parseNumber(cells[1]);
+          if (!kode) { out.errors.push({ rowNum: i+1, raw: { kode: '', harga_jual: cells[1] }, msg: 'Kode wajib' }); return; }
+          if (harga == null || harga < 0) { out.errors.push({ rowNum: i+1, raw: { kode, harga_jual: cells[1] }, msg: 'Harga tidak valid' }); return; }
+          const it = iMap.get(kode);
+          if (!it) { out.errors.push({ rowNum: i+1, raw: { kode, harga_jual: harga }, msg: `Kode "${kode}" tidak ditemukan` }); return; }
+          out.rows.push({ period_id: pid, item_id: it.id, harga_jual: harga, sumber: 'manual' });
+        });
+        return out;
+      },
+      onCommit: async (rows) => {
+        await PasteModal.bulkUpsert('item_harga_periode', rows, ['period_id','item_id']);
+      },
+    });
+    if (n) { toast(`${n} harga periode disimpan`, 'success'); load(); }
+  };
+
+  document.getElementById('hp-copy-prev').onclick = async () => {
+    // Cari periode sebelumnya (bulan -1)
+    const cur = Period.list.find(p => p.id === pid);
+    if (!cur) return alert('Periode tidak ditemukan.');
+    let prevBulan = cur.bulan - 1, prevTahun = cur.tahun;
+    if (prevBulan === 0) { prevBulan = 12; prevTahun = cur.tahun - 1; }
+    const prev = Period.list.find(p => p.bulan === prevBulan && p.tahun === prevTahun);
+    if (!prev) return alert(`Periode sebelumnya (${prevBulan}/${prevTahun}) tidak ditemukan.`);
+    if (!confirm(`Copy semua harga periode dari ${Period.label(prev.id)} ke ${Period.label(pid)}?`)) return;
+    const { data, error } = await sb.from('item_harga_periode')
+      .select('item_id,harga_jual').eq('period_id', prev.id);
+    if (error) return alert(error.message);
+    if (!data?.length) return alert('Periode sebelumnya tidak punya data harga.');
+    const rows = data.map(r => ({ period_id: pid, item_id: r.item_id, harga_jual: r.harga_jual, sumber: 'copy_prev' }));
+    await PasteModal.bulkUpsert('item_harga_periode', rows, ['period_id','item_id']);
+    toast(`${rows.length} harga disalin`, 'success');
+    load();
+  };
+
+  document.getElementById('hp-reset-master').onclick = async () => {
+    if (!confirm('Hapus semua harga periode untuk periode ini? Semua item akan fallback ke master.')) return;
+    const { error } = await sb.from('item_harga_periode').delete().eq('period_id', pid);
+    if (error) return alert(error.message);
+    toast('Harga periode direset', 'success');
+    load();
+  };
+
+  document.getElementById('hp-export').onclick = async () => {
+    const { data } = await sb.from('items')
+      .select('kode,nama,satuan,kategori,harga_jual').eq('aktif', true).order('nama');
+    const { data: hp } = await sb.from('item_harga_periode')
+      .select('item_id,harga_jual').eq('period_id', pid);
+    const hpMap = {};
+    (hp || []).forEach(h => { hpMap[h.item_id] = h.harga_jual; });
+    // Ambil item_id juga
+    const { data: itemsFull } = await sb.from('items').select('id,kode').eq('aktif', true);
+    const idByKode = {}; (itemsFull||[]).forEach(i => idByKode[i.kode] = i.id);
+    const obj = (data || []).map(r => ({
+      kode: r.kode, nama: r.nama, satuan: r.satuan, kategori: r.kategori,
+      harga_jual_master: r.harga_jual,
+      harga_jual_periode: hpMap[idByKode[r.kode]] ?? '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(obj);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Harga Periode');
+    XLSX.writeFile(wb, `harga-periode-${Period.label(pid)}.xlsx`);
+  };
+
+  await load();
+}
+
+// Helper: map items by kode/nama (reuse logic TrxPage)
+function mapByKodeFromItems(arr) {
+  const m = new Map();
+  arr.forEach(x => {
+    if (x.kode) m.set(String(x.kode).trim().toUpperCase(), x);
+    if (x.nama) m.set(String(x.nama).trim().toUpperCase().replace(/\s+/g,' '), x);
+  });
+  return m;
+}
+
+// ---------- PAGE: KOREKSI HARGA JUAL MASTER ----------
+async function pageKoreksiHargaJual() {
+  const el = document.getElementById('page-content');
+  el.innerHTML = `
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3 text-sm text-amber-800">
+      ⚠️ <b>Halaman khusus koreksi harga jual master.</b>
+      Harga jual master terkunci otomatis setelah ada opname. Koreksi di sini akan tercatat di log dengan alasan wajib.
+      <br>Perubahan harga jual master <b>hanya memengaruhi fallback</b> — harga periode tetap dipakai untuk laporan historis.
+    </div>
+    <div class="bg-white rounded-xl shadow p-4 mb-3">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-500">Cari (kode/nama)</label>
+          <input id="kh-q" class="w-full border rounded px-2 py-1 text-sm" placeholder="ketik...">
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Status Kunci</label>
+          <select id="kh-lock" class="w-full border rounded px-2 py-1 text-sm">
+            <option value="">Semua</option>
+            <option value="locked">🔒 Terkunci</option>
+            <option value="unlocked">🔓 Belum terkunci</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button id="kh-search" class="btn btn-primary w-full">Cari</button>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow"><div id="kh-table" class="table-scroll"></div></div>
+  `;
+
+  let page = 1, pageSize = 20, total = 0;
+
+  async function load() {
+    const div = document.getElementById('kh-table');
+    div.innerHTML = '<div class="p-6 text-slate-500 text-sm">Memuat...</div>';
+    const q = document.getElementById('kh-q').value.trim();
+    const lock = document.getElementById('kh-lock').value;
+    const from = (page-1) * pageSize, to = from + pageSize - 1;
+
+    let query = sb.from('items')
+      .select('id,kode,nama,satuan,kategori,harga_jual,harga_jual_locked,harga_jual_locked_at', { count: 'exact' })
+      .range(from, to).order('nama');
+    if (q) {
+      const safe = q.replace(/[%_,()]/g, '').trim();
+      if (safe) query = query.or(`kode.ilike.%${safe}%,nama.ilike.%${safe}%`);
+    }
+    if (lock === 'locked') query = query.eq('harga_jual_locked', true);
+    else if (lock === 'unlocked') query = query.eq('harga_jual_locked', false);
+
+    const { data, error, count } = await query;
+    if (error) { div.innerHTML = `<div class="p-4 text-red-600">${esc(error.message)}</div>`; return; }
+    total = count || 0;
+
+    let html = '<table class="w-full text-xs"><thead><tr>';
+    ['Kode','Nama','Satuan','Kategori','Harga Jual','Status','Aksi']
+      .forEach(h => html += `<th class="px-2 py-2 text-left">${h}</th>`);
+    html += '</tr></thead><tbody>';
+    (data || []).forEach(r => {
+      const lockBadge = r.harga_jual_locked
+        ? `<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[10px]">🔒 terkunci</span>`
+        : `<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">🔓 terbuka</span>`;
+      html += `<tr class="border-t hover:bg-slate-50">
+        <td class="px-2 py-1 font-mono">${esc(r.kode)}</td>
+        <td class="px-2 py-1">${esc(r.nama)}</td>
+        <td class="px-2 py-1">${esc(r.satuan)}</td>
+        <td class="px-2 py-1">${esc(r.kategori)}</td>
+        <td class="px-2 py-1 text-right">${fmtNum(r.harga_jual)}</td>
+        <td class="px-2 py-1 text-center">${lockBadge}</td>
+        <td class="px-2 py-1">
+          <button data-koreksi="${r.id}" class="text-blue-700 hover:underline">koreksi</button>
+        </td>
+      </tr>`;
+    });
+    if (!data?.length) html += '<tr><td colspan="7" class="p-6 text-center text-slate-400">Tidak ada item.</td></tr>';
+    html += '</tbody></table>';
+
+    const totalPage = Math.max(1, Math.ceil(total / pageSize));
+    html += `<div class="p-3 flex items-center justify-between border-t text-sm bg-white">
+      <span>Total: <b>${total}</b> item · Halaman ${page}/${totalPage}</span>
+      <div class="flex gap-2">
+        <button id="kh-prev" class="btn btn-gray" ${page===1?'disabled':''}>&larr; Prev</button>
+        <button id="kh-next" class="btn btn-gray" ${page>=totalPage?'disabled':''}>Next &rarr;</button>
+      </div>
+    </div>`;
+    div.innerHTML = html;
+
+    document.getElementById('kh-prev').onclick = () => { if (page>1) { page--; load(); } };
+    document.getElementById('kh-next').onclick = () => { if (page<totalPage) { page++; load(); } };
+
+    div.querySelectorAll('[data-koreksi]').forEach(b => b.onclick = async () => {
+      const id = Number(b.dataset.koreksi);
+      const { data: item } = await sb.from('items').select('*').eq('id', id).single();
+      if (!item) return;
+
+      // Modal koreksi
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4';
+      modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+          <div class="px-6 py-4 border-b flex items-center justify-between">
+            <h3 class="text-lg font-bold">Koreksi Harga Jual Master</h3>
+            <button data-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+          </div>
+          <div class="p-6 space-y-3">
+            <div class="text-xs text-slate-500">Kode: <b class="font-mono">${esc(item.kode)}</b></div>
+            <div class="text-sm">${esc(item.nama)}</div>
+            <div>
+              <label class="text-xs text-slate-500">Harga Jual Lama</label>
+              <input class="w-full border rounded px-2 py-1 text-sm bg-slate-100" value="${fmtNum(item.harga_jual)}" readonly>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Harga Jual Baru <span class="text-red-500">*</span></label>
+              <input data-f="harga" type="number" class="w-full border rounded px-2 py-1 text-sm" value="${item.harga_jual}">
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Alasan Koreksi <span class="text-red-500">*</span></label>
+              <textarea data-f="alasan" rows="3" class="w-full border rounded px-2 py-1 text-sm" placeholder="mis. Koreksi tarif dari SIM RS, salah input awal, dll"></textarea>
+            </div>
+            <div data-msg class="text-sm"></div>
+          </div>
+          <div class="px-6 py-3 border-t flex justify-end gap-2">
+            <button data-close class="btn btn-gray">Batal</button>
+            <button data-save class="btn btn-success">Simpan Koreksi</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      const $ = (s) => modal.querySelector(s);
+      modal.querySelectorAll('[data-close]').forEach(x => x.onclick = () => modal.remove());
+      $('[data-f="harga"]').focus();
+
+      $('[data-save]').onclick = async () => {
+        const harga = Number($('[data-f="harga"]').value);
+        const alasan = $('[data-f="alasan"]').value.trim();
+        if (isNaN(harga) || harga < 0) { $('[data-msg]').innerHTML = '<span class="text-red-600">Harga tidak valid.</span>'; return; }
+        if (!alasan) { $('[data-msg]').innerHTML = '<span class="text-red-600">Alasan wajib diisi.</span>'; return; }
+        if (harga === Number(item.harga_jual)) { 
+          $('[data-msg]').innerHTML = '<span class="text-amber-600">Harga sama dengan sebelumnya, tidak ada perubahan.</span>'; 
+          return; 
+        }
+
+        $('[data-save]').disabled = true;
+        $('[data-save]').textContent = 'Menyimpan...';
+
+        // 1. Simpan ke items
+        const { error: err1 } = await sb.from('items')
+          .update({ harga_jual: harga })
+          .eq('id', item.id);
+        if (err1) {
+          $('[data-msg]').innerHTML = `<span class="text-red-600">Gagal: ${esc(err1.message)}</span>`;
+          $('[data-save]').disabled = false;
+          $('[data-save]').textContent = 'Simpan Koreksi';
+          return;
+        }
+
+        // 2. Catat log
+        const { data: userData } = await sb.auth.getUser();
+        await sb.from('items_harga_jual_log').insert([{
+          item_id: item.id,
+          harga_jual_lama: item.harga_jual,
+          harga_jual_baru: harga,
+          alasan: alasan,
+          diubah_oleh: userData?.user?.id || null
+        }]);
+
+        toast('Harga jual master dikoreksi', 'success');
+        modal.remove();
+        load(); // Refresh tabel
+      };
+    });
+  }
+
+  document.getElementById('kh-search').onclick = () => { page = 1; load(); };
+  document.getElementById('kh-q').addEventListener('keydown', e => { if (e.key==='Enter'){ page = 1; load(); }});
+  document.getElementById('kh-lock').onchange = () => { page = 1; load(); };
+
+  await load();
+} 
+
 // ---------- PAGE: TRX RKO ----------
 async function pageRKO(periodId) {
   await TrxPage.render({
@@ -3085,9 +3505,54 @@ async function pageOpname(periodId) {
       { key:'item_kode', label:'Kode Item',  type:'item_code', required:true },
       { key:'item_nama', label:'Nama Item' },
       { key:'satuan',    label:'Satuan' },
-      { key:'qty',       label:'Sisa Opname', type:'number', required:true },
+      { key:'qty',       label:'Qty (+/-)',  type:'number', required:true },
       { key:'ket',       label:'Ket' },
+      { key:'harga_jual',label:'Harga Jual', type:'number' },   // ← BARU
     ],
+    // Override onCommit default: pisahkan opname qty & harga jual periode
+    onCommit: async (rows) => {
+      // 1. Simpan qty opname
+      const opnameRows = rows.map(r => ({
+        period_id: periodId,
+        item_id: r.item_id,
+        unit_id: r.unit_id,
+        qty: r.qty,
+        ket: r.ket,
+      }));
+      await PasteModal.bulkUpsert('opname', opnameRows, ['period_id','item_id','unit_id']);
+
+      // 2. Upsert harga jual periode (kalau diisi)
+      const hargaRows = rows.filter(r => r.harga_jual != null && Number(r.harga_jual) > 0);
+      if (hargaRows.length) {
+        // Validasi konsistensi antar unit untuk item yang sama
+        const byItem = {};
+        for (const r of hargaRows) {
+          const h = Number(r.harga_jual);
+          if (byItem[r.item_id] !== undefined && byItem[r.item_id] !== h) {
+            throw new Error(`Harga jual item ${r.item_nama || r.item_id} beda antar unit (${byItem[r.item_id]} vs ${h}). Pastikan konsisten.`);
+          }
+          byItem[r.item_id] = h;
+        }
+        // Cek periode belum locked
+        const { data: lockedCheck } = await sb.from('item_harga_periode')
+          .select('item_id,is_locked')
+          .eq('period_id', periodId)
+          .in('item_id', Object.keys(byItem).map(Number))
+          .eq('is_locked', true)
+          .limit(1);
+        if (lockedCheck && lockedCheck.length) {
+          throw new Error('Periode sudah dikunci. Harga jual tidak bisa diubah. Buka kembali periode jika perlu koreksi.');
+        }
+        // Upsert harga jual periode
+        const upsertRows = Object.entries(byItem).map(([itemId, harga]) => ({
+          period_id: periodId,
+          item_id: Number(itemId),
+          harga_jual: harga,
+          sumber: 'paste_opname',
+        }));
+        await PasteModal.bulkUpsert('item_harga_periode', upsertRows, ['period_id','item_id']);
+      }
+    },
   });
 }
 
@@ -3108,6 +3573,8 @@ async function pageOpname(periodId) {
   Router.register('item',        { title:'Item Obat & BMHP',       render: pageMasterItem });
   Router.register('unit',        { title:'Master Unit',            render: pageMasterUnit });
   Router.register('periode',     { title:'Master Periode',         render: pageMasterPeriode });
+  Router.register('harga-periode', { title:'Harga Jual Periode',   render: pageHargaPeriode }); // <-- BARU
+  Router.register('koreksi-harga', { title:'Koreksi Harga Master', render: pageKoreksiHargaJual }); // <-- BARU
   Router.register('rko',         { title:'RKO',                    render: () => pageRKO(window.activePeriodId) });
   Router.register('penerimaan',  { title:'Penerimaan / Realisasi', render: () => pagePenerimaan(window.activePeriodId) });
   Router.register('mutasi',      { title:'Mutasi ke Unit',         render: () => pageMutasi(window.activePeriodId) });
