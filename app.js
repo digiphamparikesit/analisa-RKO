@@ -2890,6 +2890,10 @@ async function pageMasterPeriode() {
             .map((n,i) => i ? `<option value="${i}">${n}</option>` : '').join('')}
         </select>
       </div>
+      <div>
+        <label class="text-xs text-slate-500">Tgl Opname</label>
+        <input id="p-tgl-opname" type="date" class="border rounded px-2 py-1 text-sm">
+      </div>
       <button id="p-add" class="btn btn-primary">+ Buat Periode</button>
     </div>
     <div class="bg-white rounded-xl shadow"><div id="p-table" class="table-scroll"></div></div>
@@ -2898,15 +2902,25 @@ async function pageMasterPeriode() {
   async function load() {
     await Period.load();
     const div = document.getElementById('p-table');
+    
     let html = '<table class="w-full text-xs"><thead><tr>';
-    ['Tahun','Bulan','Status','Closed At','Aksi'].forEach(h =>
+    ['Tahun', 'Bulan', 'Tgl Opname', 'Status', 'Closed At', 'Aksi'].forEach(h =>
       html += `<th class="px-2 py-2 text-left">${h}</th>`);
     html += '</tr></thead><tbody>';
+    
     Period.list.forEach(p => {
       const isOpen = p.status === 'open';
+      // Format tanggal agar rapi (Y-M-D menjadi D-M-Y)
+      let tglTampil = '-';
+      if (p.tanggal_opname) {
+        const d = new Date(p.tanggal_opname);
+        tglTampil = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+
       html += `<tr class="border-t hover:bg-slate-50">
         <td class="px-2 py-1">${p.tahun}</td>
         <td class="px-2 py-1">${p.bulan}</td>
+        <td class="px-2 py-1 font-semibold text-blue-700">${tglTampil}</td>
         <td class="px-2 py-1">
           <span class="px-2 py-0.5 rounded text-[10px] ${isOpen ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}">
             ${p.status}
@@ -2917,12 +2931,14 @@ async function pageMasterPeriode() {
           ${isOpen
             ? `<button data-close="${p.id}" class="text-red-700 hover:underline">Tutup Periode</button>`
             : `<button data-reopen="${p.id}" class="text-blue-700 hover:underline">Buka Kembali</button>`}
+          <button data-edit-tgl="${p.id}" data-current-tgl="${p.tanggal_opname || ''}" class="text-blue-700 hover:underline ml-2">✎ Edit Tgl</button>
         </td>
       </tr>`;
     });
     html += '</tbody></table>';
     div.innerHTML = html;
 
+    // Handler Tutup Periode
     div.querySelectorAll('[data-close]').forEach(b => b.onclick = async () => {
       if (!confirm('Tutup periode? Stok akhir akan menjadi stok awal periode berikutnya.')) return;
       const { error } = await sb.rpc('fn_close_period', { p_period_id: Number(b.dataset.close) });
@@ -2930,6 +2946,8 @@ async function pageMasterPeriode() {
       toast('Periode ditutup', 'success');
       load();
     });
+
+    // Handler Buka Kembali
     div.querySelectorAll('[data-reopen]').forEach(b => b.onclick = async () => {
       if (!confirm('Buka kembali periode ini? Saldo awal periode berikutnya akan dihapus.')) return;
       const { error } = await sb.rpc('fn_reopen_period', { p_period_id: Number(b.dataset.reopen) });
@@ -2937,13 +2955,35 @@ async function pageMasterPeriode() {
       toast('Periode dibuka kembali', 'success');
       load();
     });
+
+    // Handler Edit Tanggal Opname
+    div.querySelectorAll('[data-edit-tgl]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.editTgl;
+      const current = b.dataset.currentTgl;
+      const newTgl = prompt('Masukkan Tanggal Opname (YYYY-MM-DD):', current);
+      if (newTgl === null) return; // Batal
+      
+      const { error } = await sb.from('periods').update({ tanggal_opname: newTgl || null }).eq('id', id);
+      if (error) return alert(error.message);
+      toast('Tanggal opname diperbarui', 'success');
+      load();
+    });
   }
 
+  // Handler Buat Periode Baru
   document.getElementById('p-add').onclick = async () => {
     const tahun = Number(document.getElementById('p-tahun').value);
     const bulan = Number(document.getElementById('p-bulan').value);
+    const tglOpname = document.getElementById('p-tgl-opname').value; // Hasilnya YYYY-MM-DD
+    
     if (!tahun || !bulan) return alert('Isi tahun & bulan');
-    const { error } = await sb.from('periods').insert([{ tahun, bulan }]);
+    
+    const { error } = await sb.from('periods').insert([{ 
+      tahun, 
+      bulan, 
+      tanggal_opname: tglOpname || null 
+    }]);
+    
     if (error) return alert(error.message);
     toast('Periode dibuat', 'success');
     load();
